@@ -13,12 +13,11 @@ const INITIAL_MOCK_DATA = Array.from({ length: 5 }, (_, i) => ({
   permissoes: i < 2 ? 'Total' : i % 3 === 0 ? 'Financeiro' : 'Campeonatos'
 }));
 
+import { supabase } from '../lib/supabase';
+
 export default function Diretoria() {
-  const [diretoria, setDiretoria] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:diretoria');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [diretoria, setDiretoria] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -38,9 +37,25 @@ export default function Diretoria() {
     permissoes: 'Total'
   });
 
+  const fetchDiretoria = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('diretoria')
+      .select('*')
+      .order('id', { ascending: false });
+      
+    if (error) {
+      toast.error('Erro ao carregar diretoria do Supabase');
+      console.error(error);
+    } else if (data) {
+      setDiretoria(data);
+    }
+    setIsLoading(false);
+  };
+
   useEffect(() => {
-    localStorage.setItem('@nicolau:diretoria', JSON.stringify(diretoria));
-  }, [diretoria]);
+    fetchDiretoria();
+  }, []);
 
   const filteredItems = diretoria.filter((d: any) => 
     d.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -51,29 +66,59 @@ export default function Diretoria() {
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const novo = {
-      id: Date.now(),
-      ...formData
-    };
-    setDiretoria([novo, ...diretoria]);
-    setFormModalOpen(false);
-    resetForm();
+    const { data, error } = await supabase
+      .from('diretoria')
+      .insert([formData])
+      .select();
+
+    if (error) {
+      console.error(error);
+      toast.error('Erro ao salvar integrante');
+    } else if (data) {
+      setDiretoria([data[0], ...diretoria]);
+      setFormModalOpen(false);
+      resetForm();
+      toast.success('Integrante cadastrado com sucesso!');
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setDiretoria(diretoria.map((d: any) => d.id === membroSelecionado.id ? { ...d, ...formData } : d));
-    setEditModalOpen(false);
-    resetForm();
-  };
+    const { data, error } = await supabase
+      .from('diretoria')
+      .update(formData)
+      .eq('id', membroSelecionado.id)
+      .select();
 
-  const excluirMembro = () => {
-    if (confirm('Tem certeza que deseja excluir este membro da diretoria?')) {
-      setDiretoria(diretoria.filter((d: any) => d.id !== membroSelecionado.id));
+    if (error) {
+      console.error(error);
+      toast.error('Erro ao atualizar integrante');
+    } else if (data) {
+      setDiretoria(diretoria.map((d: any) => d.id === membroSelecionado.id ? data[0] : d));
       setEditModalOpen(false);
       resetForm();
+      toast.success('Integrante atualizado!');
+    }
+  };
+
+  const excluirMembro = async () => {
+    if (confirm('Tem certeza que deseja excluir este membro da diretoria?')) {
+      const { error } = await supabase
+        .from('diretoria')
+        .delete()
+        .eq('id', membroSelecionado.id);
+        
+      if (error) {
+        console.error(error);
+        toast.error('Erro ao excluir membro');
+      } else {
+        setDiretoria(diretoria.filter((d: any) => d.id !== membroSelecionado.id));
+        setEditModalOpen(false);
+        resetForm();
+        toast.success('Membro excluído!');
+      }
     }
   };
 
@@ -142,7 +187,11 @@ export default function Diretoria() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        {filteredItems.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center p-12">
+            <p className="text-slate-500">Carregando membros da diretoria...</p>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="text-center p-12">
             <p className="text-slate-500">Nenhum membro da diretoria encontrado.</p>
           </div>
