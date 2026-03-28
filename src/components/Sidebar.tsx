@@ -1,11 +1,12 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Trophy, Users, User, ShieldAlert, 
   Wallet, Image as ImageIcon, History, HeartHandshake, 
-  Calendar, FileText, Gavel, Briefcase, X, PlayCircle
+  Calendar, FileText, Gavel, Briefcase, X, PlayCircle, LogOut
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useAuth } from '../contexts/AuthContext';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -29,6 +30,14 @@ const navigation = [
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <div className="flex h-full w-64 flex-col bg-slate-900 border-r border-slate-800">
       <div className="flex h-16 shrink-0 items-center justify-between px-6 bg-slate-950">
@@ -72,7 +81,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           ))}
         </nav>
       </div>
-      <div className="flex shrink-0 border-t border-slate-800 p-4">
+      <div className="flex shrink-0 flex-col border-t border-slate-800 p-4 gap-3">
         <div className="flex items-center">
           <div>
             <img
@@ -82,13 +91,20 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
               referrerPolicy="no-referrer"
             />
           </div>
-          <div className="ml-3">
-            <p className="text-sm font-medium text-white">Admin Geral</p>
-            <p className="text-xs font-medium text-slate-400 group-hover:text-slate-300">
-              Ver perfil
+          <div className="ml-3 overflow-hidden">
+            <p className="text-sm font-medium text-white">Admin LIFACE</p>
+            <p className="text-xs font-medium text-slate-400 truncate" title={user?.email}>
+              {user?.email || 'administrador'}
             </p>
           </div>
         </div>
+        <button
+          onClick={handleSignOut}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-red-600/20 hover:text-red-400 transition-colors"
+        >
+          <LogOut className="h-4 w-4" />
+          Sair do Sistema
+        </button>
       </div>
     </div>
   );
