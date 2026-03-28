@@ -17,7 +17,7 @@ export default function Diretoria() {
   const [diretoria, setDiretoria] = useState(() => {
     const saved = localStorage.getItem('@nicolau:diretoria');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

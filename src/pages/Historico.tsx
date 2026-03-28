@@ -17,7 +17,7 @@ export default function Historico() {
   const [historico, setHistorico] = useState(() => {
     const saved = localStorage.getItem('@nicolau:historico');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

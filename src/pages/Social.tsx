@@ -17,7 +17,7 @@ export default function Social() {
   const [projetos, setProjetos] = useState(() => {
     const saved = localStorage.getItem('@nicolau:social');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

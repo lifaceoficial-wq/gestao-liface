@@ -18,7 +18,7 @@ export default function Campeonatos() {
   const [campeonatos, setCampeonatos] = useState(() => {
     const saved = localStorage.getItem('@nicolau:campeonatos');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

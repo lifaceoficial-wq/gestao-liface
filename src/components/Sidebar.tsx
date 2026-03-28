@@ -82,11 +82,19 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
               referrerPolicy="no-referrer"
             />
           </div>
-          <div className="ml-3">
+          <div className="ml-3 flex flex-col items-start">
             <p className="text-sm font-medium text-white">Admin Geral</p>
-            <p className="text-xs font-medium text-slate-400 group-hover:text-slate-300">
-              Ver perfil
-            </p>
+            <button 
+              onClick={() => {
+                if(window.confirm('Tem certeza que deseja apagar absolutamente todos os dados simulados do navegador? Essa ação limpa todo o LocalStorage!')) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }}
+              className="text-xs font-medium text-red-400 hover:text-red-300 transition-colors mt-1 border border-red-500/20 bg-red-500/10 px-2 py-0.5 rounded cursor-pointer"
+            >
+              Zerar Dados (Dev)
+            </button>
           </div>
         </div>
       </div>

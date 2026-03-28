@@ -17,7 +17,7 @@ export default function Arbitros() {
   const [arbitros, setArbitros] = useState(() => {
     const saved = localStorage.getItem('@nicolau:arbitros');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

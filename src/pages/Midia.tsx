@@ -16,7 +16,7 @@ export default function Midia() {
   const [midias, setMidias] = useState(() => {
     const saved = localStorage.getItem('@nicolau:midia');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');

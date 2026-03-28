@@ -19,7 +19,7 @@ export default function Eventos() {
   const [eventos, setEventos] = useState(() => {
     const saved = localStorage.getItem('@nicolau:eventos');
     if (saved) return JSON.parse(saved);
-    return INITIAL_MOCK_DATA;
+    return [];
   });
 
   const [searchTerm, setSearchTerm] = useState('');
