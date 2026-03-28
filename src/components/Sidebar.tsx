@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, Trophy, Users, User, ShieldAlert, 
   Wallet, Image as ImageIcon, History, HeartHandshake, 
-  Calendar, FileText, Gavel, Briefcase, X
+  Calendar, FileText, Gavel, Briefcase, X, PlayCircle
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -14,6 +14,7 @@ function cn(...inputs: ClassValue[]) {
 const navigation = [
   { name: 'Painel Inicial', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Campeonatos', href: '/campeonatos', icon: Trophy },
+  { name: 'Jogos & Súmulas', href: '/jogos', icon: PlayCircle },
   { name: 'Equipes', href: '/equipes', icon: Users },
   { name: 'Atletas', href: '/atletas', icon: User },
   { name: 'Árbitros', href: '/arbitros', icon: Gavel },
