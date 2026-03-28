@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { Shield, Key, Mail, Lock } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function Login() {
+  const { session } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Se já está logado, redireciona imediatamente
+  if (session) {
+    navigate('/dashboard', { replace: true });
+    return null;
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +33,7 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       toast.success('Login efetuado com sucesso!');
+      navigate('/dashboard', { replace: true });
     } catch (error: any) {
       toast.error(error.message || 'Ocorreu um erro na autenticação.');
     } finally {
