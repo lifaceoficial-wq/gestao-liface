@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, BarChart3, Plus } from 'lucide-react';
 import Modal from '../components/Modal';
 

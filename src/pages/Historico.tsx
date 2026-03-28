@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Filter, Trophy, Calendar, FileText, Plus, Edit2, Trash2 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
