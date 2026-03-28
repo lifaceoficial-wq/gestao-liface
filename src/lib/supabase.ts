@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-// @ts-ignore
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sua-url-do-supabase.supabase.co';
-// @ts-ignore
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sua-chave-anon-do-supabase';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const isSupabaseConfigured = supabaseUrl !== 'https://sua-url-do-supabase.supabase.co';
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY são obrigatórias no .env');
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
