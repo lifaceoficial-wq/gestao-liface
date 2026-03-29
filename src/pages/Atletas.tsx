@@ -4,6 +4,43 @@ import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
+const formatPhone = (value: string) => {
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2')
+    .replace(/(-\d{4})\d+?$/, '$1');
+};
+
+const formatCPF = (value: string) => {
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+    .replace(/(-\d{2})\d+?$/, '$1');
+};
+
+const validateCPF = (cpf: string) => {
+  cpf = cpf.replace(/[^\d]+/g, '');
+  if (cpf === '') return false;
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  
+  let add = 0;
+  for (let i = 0; i < 9; i++) add += parseInt(cpf.charAt(i)) * (10 - i);
+  let rev = 11 - (add % 11);
+  if (rev === 10 || rev === 11) rev = 0;
+  if (rev !== parseInt(cpf.charAt(9))) return false;
+  
+  add = 0;
+  for (let i = 0; i < 10; i++) add += parseInt(cpf.charAt(i)) * (11 - i);
+  rev = 11 - (add % 11);
+  if (rev === 10 || rev === 11) rev = 0;
+  if (rev !== parseInt(cpf.charAt(10))) return false;
+  
+  return true;
+};
+
 export default function Atletas() {
   const [atletas, setAtletas] = useState<any[]>([]);
   const [equipesCadastradas, setEquipesCadastradas] = useState<any[]>([]);
@@ -20,6 +57,7 @@ export default function Atletas() {
     nome: '',
     apelido: '',
     documento: '',
+    telefone: '',
     posicao: '',
     equipe_id: '',
     equipe_nome: '',
@@ -95,21 +133,34 @@ export default function Atletas() {
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!formData.equipe_id) { toast.error('Selecione uma equipe!'); return; }
+    if (!formData.documento || !validateCPF(formData.documento)) {
+      toast.error('CPF inválido! Por favor, insira um CPF válido.');
+      return;
+    }
+    
+    // Verifica duplicidade usando o array "atletas" em memória
+    // Retiramos pontuações caso precise, mas se usarmos o próprio "documento" formatado no db, funciona
+    const isDuplicate = atletas.some(a => a.documento === formData.documento);
+    if (isDuplicate) {
+      toast.error('Este CPF já está cadastrado em outro atleta!');
+      return;
+    }
 
     const loadingToast = toast.loading('Salvando atleta...');
     try {
-      const payload = {
-        nome: formData.nome,
-        apelido: formData.apelido,
-        documento: formData.documento,
-        posicao: formData.posicao,
-        equipe_id: formData.equipe_id,
-        equipe_nome: formData.equipe_nome,
-        campeonato_heranca: formData.campeonato_heranca,
-        historico: formData.historico,
-        status: formData.status,
-        taxa_carteira: formData.taxaCarteira
-      };
+    const payload = {
+      nome: formData.nome,
+      apelido: formData.apelido,
+      documento: formData.documento,
+      telefone: formData.telefone,
+      posicao: formData.posicao,
+      equipe_id: formData.equipe_id,
+      equipe_nome: formData.equipe_nome,
+      campeonato_heranca: formData.campeonato_heranca,
+      historico: formData.historico,
+      status: formData.status,
+      taxa_carteira: formData.taxaCarteira
+    };
 
       const { data, error } = await supabase.from('atletas').insert([payload]).select();
       if (error) throw error;
@@ -135,14 +186,27 @@ export default function Atletas() {
 
   const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.documento || !validateCPF(formData.documento)) {
+      toast.error('CPF inválido! Por favor, insira um CPF válido.');
+      return;
+    }
+    
+    const isDuplicate = atletas.some(a => a.documento === formData.documento && a.id !== atletaSelecionado?.id);
+    if (isDuplicate) {
+      toast.error('Este CPF já está cadastrado em outro atleta!');
+      return;
+    }
+
     const loadingToast = toast.loading('Atualizando atleta...');
     try {
-      const payload = {
-        nome: formData.nome,
-        documento: formData.documento,
-        posicao: formData.posicao,
-        status: formData.status
-      };
+    const payload = {
+      nome: formData.nome,
+      documento: formData.documento,
+      telefone: formData.telefone,
+      posicao: formData.posicao,
+      status: formData.status
+    };
 
       const { error } = await supabase.from('atletas').update(payload).eq('id', atletaSelecionado.id);
       if (error) throw error;
@@ -173,7 +237,7 @@ export default function Atletas() {
   };
 
   const resetForm = () => {
-    setFormData({ nome: '', apelido: '', documento: '', posicao: '', equipe_id: '', equipe_nome: '', campeonato_heranca: '', historico: 'Limpo', status: 'Regular', taxaCarteira: 15 });
+    setFormData({ nome: '', apelido: '', documento: '', telefone: '', posicao: '', equipe_id: '', equipe_nome: '', campeonato_heranca: '', historico: 'Limpo', status: 'Regular', taxaCarteira: 15 });
     setAtletaSelecionado(null);
   };
 
@@ -181,6 +245,7 @@ export default function Atletas() {
     setAtletaSelecionado(atleta);
     setFormData({ 
       ...atleta, 
+      telefone: atleta.telefone || '',
       equipe_id: atleta.equipe_id || '',
       equipe_nome: atleta.equipe_nome || atleta.equipe || '',
       taxaCarteira: atleta.taxa_carteira || 15 
@@ -230,8 +295,16 @@ export default function Atletas() {
                   <td className="whitespace-nowrap py-4 pl-4 pr-3 flex items-center gap-3">
                     <img className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200" src={`https://avatar.iran.liara.run/public/boy?username=${atleta.nome.replace(' ', '')}`} referrerPolicy="no-referrer" />
                     <div>
-                      <div className="font-medium text-slate-900">{atleta.nome} {atleta.documento ? `(Doc: ${atleta.documento})` : ''}</div>
+                      <div className="font-medium text-slate-900">{atleta.nome} {atleta.documento ? `(CPF: ${atleta.documento})` : ''}</div>
                       <div className="text-slate-500 text-xs">{atleta.apelido || atleta.posicao || 'Sem apelido/posição'}</div>
+                      {atleta.telefone && (
+                        <a href={`https://wa.me/55${atleta.telefone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="inline-flex items-center text-xs text-emerald-600 hover:text-emerald-700 mt-1 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                          <svg className="w-3.5 h-3.5 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/>
+                          </svg>
+                          WhatsApp
+                        </a>
+                      )}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-4">
@@ -270,9 +343,15 @@ export default function Atletas() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700">Documento (RG/CPF)</label>
-              <input type="text" value={formData.documento} onChange={e => setFormData({...formData, documento: e.target.value})} className="mt-1 block w-full rounded border-slate-300 px-3 py-2 border shadow-sm sm:text-sm" />
+              <label className="block text-sm font-medium text-slate-700">CPF</label>
+              <input required type="text" placeholder="000.000.000-00" value={formData.documento} onChange={e => setFormData({...formData, documento: formatCPF(e.target.value)})} className="mt-1 block w-full rounded border-slate-300 px-3 py-2 border shadow-sm sm:text-sm" />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Telefone / WhatsApp</label>
+              <input type="text" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: formatPhone(e.target.value)})} className="mt-1 block w-full rounded border-slate-300 px-3 py-2 border shadow-sm sm:text-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">Posição</label>
               <input type="text" placeholder="Goleiro, Fixo, Ala..." value={formData.posicao} onChange={e => setFormData({...formData, posicao: e.target.value})} className="mt-1 block w-full rounded border-slate-300 px-3 py-2 border shadow-sm sm:text-sm" />
@@ -321,15 +400,21 @@ export default function Atletas() {
               <input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="block w-full rounded border-slate-300 px-3 py-2 sm:text-sm border" />
             </div>
             <div>
-              <label className="text-sm">Documento</label>
-              <input type="text" value={formData.documento} onChange={e => setFormData({...formData, documento: e.target.value})} className="block w-full rounded border-slate-300 px-3 py-2 sm:text-sm border" />
+              <label className="text-sm">CPF</label>
+              <input required type="text" placeholder="000.000.000-00" value={formData.documento} onChange={e => setFormData({...formData, documento: formatCPF(e.target.value)})} className="block w-full rounded border-slate-300 px-3 py-2 sm:text-sm border" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <label className="text-sm">Telefone / WhatsApp</label>
+              <input type="text" placeholder="(00) 00000-0000" value={formData.telefone} onChange={e => setFormData({...formData, telefone: formatPhone(e.target.value)})} className="block w-full rounded border-slate-300 px-3 py-2 sm:text-sm border" />
+            </div>
+            <div>
               <label className="text-sm">Posição</label>
               <input type="text" value={formData.posicao} onChange={e => setFormData({...formData, posicao: e.target.value})} className="block w-full rounded border-slate-300 px-3 py-2 sm:text-sm border" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm">Status Disciplinar</label>
               <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="block w-full rounded border-slate-300 px-3 py-2 sm:text-sm border">
