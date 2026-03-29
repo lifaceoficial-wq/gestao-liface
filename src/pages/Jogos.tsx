@@ -281,6 +281,111 @@ export default function Jogos() {
     }
   };
 
+  const gerarSumulaPDF = async (jogo: any) => {
+    try {
+       // Buscar eventos mais atualizados do banco
+       const { data: eventos } = await supabase.from('eventos_jogo').select('*').eq('jogo_id', jogo.id);
+       
+       const printWindow = window.open('', '_blank');
+       if (!printWindow) return;
+
+       let eventosHtml = '<p style="color: #6B7280; font-size: 14px; font-style: italic;">Nenhum evento registrado nesta partida.</p>';
+       
+       if (eventos && eventos.length > 0) {
+         const linhas = eventos.sort((a: any, b: any) => a.tempo.localeCompare(b.tempo)).map((ev: any) => {
+           let tipoFormated = ev.tipo === 'Gol' ? '⚽ GOL' : ev.tipo === 'Amarelo' ? '🟨 Amarelo' : '🟥 Vermelho';
+           return '<tr><td><strong>' + ev.tempo + '</strong></td><td>' + ev.equipe + '</td><td>' + ev.jogador + '</td><td>' + tipoFormated + '</td></tr>';
+         }).join('');
+         
+         eventosHtml = `
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 15%;">Tempo</th>
+                  <th style="width: 25%;">Equipe</th>
+                  <th style="width: 40%;">Jogador</th>
+                  <th style="width: 20%;">Evento</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${linhas}
+              </tbody>
+            </table>
+         `;
+       }
+
+       const htmlContent = `
+        <html>
+          <head>
+            <title>Súmula - ${jogo.equipe_a_nome} x ${jogo.equipe_b_nome}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 40px; color: #111827; }
+              .header { text-align: center; border-bottom: 2px solid #111827; padding-bottom: 20px; margin-bottom: 30px; }
+              .title { font-size: 24px; font-weight: bold; text-transform: uppercase; }
+              .subtitle { font-size: 14px; color: #4B5563; margin-top: 5px; }
+              .scoreboard { display: flex; justify-content: center; align-items: center; margin-bottom: 40px; background: #F3F4F6; padding: 20px; border-radius: 12px; }
+              .team { width: 40%; text-align: center; font-size: 20px; font-weight: bold; }
+              .score { width: 20%; text-align: center; font-size: 36px; font-weight: 900; }
+              .section-title { font-size: 16px; font-weight: bold; border-bottom: 1px solid #E5E7EB; padding-bottom: 8px; margin-top: 30px; margin-bottom: 15px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+              th, td { border: 1px solid #E5E7EB; padding: 10px; text-align: left; font-size: 14px; }
+              th { background-color: #F9FAFB; }
+              .signatures { display: flex; justify-content: space-around; margin-top: 80px; }
+              .signature-box { text-align: center; width: 30%; }
+              .signature-line { border-top: 1px solid #111827; margin-bottom: 8px; width: 200px; margin-left: auto; margin-right: auto;}
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="title">SÚMULA OFICIAL DE PARTIDA</div>
+              <div class="subtitle">${jogo.campeonato_nome} - ${jogo.rodada}</div>
+              <div class="subtitle">Data: ${new Date(jogo.data).toLocaleDateString('pt-BR')} às ${jogo.hora} | Local: ${jogo.quadra}</div>
+            </div>
+
+            <div class="scoreboard">
+              <div class="team">${jogo.equipe_a_nome}</div>
+              <div class="score">${jogo.gols_a} x ${jogo.gols_b}</div>
+              <div class="team">${jogo.equipe_b_nome}</div>
+            </div>
+
+            <div class="section-title">CRONOLOGIA DE EVENTOS (LANCE-A-LANCE)</div>
+            ${eventosHtml}
+
+            <div class="signatures">
+              <div class="signature-box">
+                <div class="signature-line"></div>
+                <div style="font-size: 14px; font-weight: bold;">Árbitro Principal</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line"></div>
+                <div style="font-size: 14px; font-weight: bold;">Capitão - ${jogo.equipe_a_nome}</div>
+              </div>
+              <div class="signature-box">
+                <div class="signature-line"></div>
+                <div style="font-size: 14px; font-weight: bold;">Capitão - ${jogo.equipe_b_nome}</div>
+              </div>
+            </div>
+
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                  window.close();
+                }, 500);
+              }
+            </script>
+          </body>
+        </html>
+       `;
+       printWindow.document.write(htmlContent);
+       printWindow.document.close();
+
+    } catch(err) {
+      toast.error('Erro ao gerar súmula.');
+      console.error(err);
+    }
+  };
+
   const jogosFiltrados = filtroCamp 
     ? jogos.filter(j => j.campeonato_nome === filtroCamp)
     : jogos;
@@ -371,7 +476,7 @@ export default function Jogos() {
                     </>
                   )}
                   {jogo.status !== 'Agendado' && (
-                    <button onClick={() => toast.success("Súmula PDF será gerada via Supabase.")} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
+                    <button onClick={() => gerarSumulaPDF(jogo)} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
                       Visualizar Súmula (PDF)
                     </button>
                   )}
