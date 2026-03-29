@@ -138,11 +138,10 @@ export default function Atletas() {
       return;
     }
     
-    // Verifica duplicidade usando o array "atletas" em memória
-    // Retiramos pontuações caso precise, mas se usarmos o próprio "documento" formatado no db, funciona
-    const isDuplicate = atletas.some(a => a.documento === formData.documento);
+    // Verifica duplicidade usando o array "atletas" em memória - APENAS para a MESMA equipe
+    const isDuplicate = atletas.some(a => a.documento === formData.documento && a.equipe_id === formData.equipe_id);
     if (isDuplicate) {
-      toast.error('Este CPF já está cadastrado em outro atleta!');
+      toast.error('Este CPF já está cadastrado NESTA mesma equipe!');
       return;
     }
 
@@ -192,9 +191,9 @@ export default function Atletas() {
       return;
     }
     
-    const isDuplicate = atletas.some(a => a.documento === formData.documento && a.id !== atletaSelecionado?.id);
+    const isDuplicate = atletas.some(a => a.documento === formData.documento && a.equipe_id === (formData.equipe_id || atletaSelecionado.equipe_id) && a.id !== atletaSelecionado.id);
     if (isDuplicate) {
-      toast.error('Este CPF já está cadastrado em outro atleta!');
+      toast.error('Este CPF já está cadastrado NESTA equipe em outro atleta!');
       return;
     }
 

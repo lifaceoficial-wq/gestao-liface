@@ -4,6 +4,35 @@ import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
+const formatCPF = (value: string) => {
+  return value
+    .replace(/\D/g, '')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+    .replace(/(-\d{2})\d+?$/, '$1');
+};
+
+const validateCPF = (cpf: string) => {
+  cpf = cpf.replace(/[^\d]+/g, '');
+  if (cpf === '') return false;
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  
+  let add = 0;
+  for (let i = 0; i < 9; i++) add += parseInt(cpf.charAt(i)) * (10 - i);
+  let rev = 11 - (add % 11);
+  if (rev === 10 || rev === 11) rev = 0;
+  if (rev !== parseInt(cpf.charAt(9))) return false;
+  
+  add = 0;
+  for (let i = 0; i < 10; i++) add += parseInt(cpf.charAt(i)) * (11 - i);
+  rev = 11 - (add % 11);
+  if (rev === 10 || rev === 11) rev = 0;
+  if (rev !== parseInt(cpf.charAt(10))) return false;
+  
+  return true;
+};
+
 export default function Equipes() {
   const [equipes, setEquipes] = useState<any[]>([]);
   const [campeonatosAtivos, setCampeonatosAtivos] = useState<any[]>([]);
@@ -105,8 +134,40 @@ export default function Equipes() {
 
   const processarAtletas = async (equipeId: string, equipeNome: string) => {
     const atletasSalvar = elencoForm
-      .filter(a => a.nome.trim() !== '' && !a.isExisting)
-      .map(a => ({
+      .filter(a => a.nome.trim() !== '' && !a.isExisting);
+
+    if(atletasSalvar.length === 0) return true;
+
+    // Validate CPFs
+    for (const atleta of atletasSalvar) {
+      if (!atleta.documento || !validateCPF(atleta.documento)) {
+        toast.error(`O CPF ${atleta.documento || 'Vazio'} do atleta ${atleta.nome} é inválido.`);
+        return false;
+      }
+    }
+
+    // Check duplicates in database for the SAME team
+    const cpfsToCheck = atletasSalvar.map(a => a.documento).filter(Boolean);
+    
+    if (cpfsToCheck.length > 0) {
+      const { data: duplicados, error: dupError } = await supabase
+        .from('atletas')
+        .select('documento, nome')
+        .in('documento', cpfsToCheck)
+        .eq('equipe_id', equipeId);
+
+      if (dupError) {
+        toast.error('Erro ao verificar CPFs duplicados no banco.');
+        return false;
+      }
+
+      if (duplicados && duplicados.length > 0) {
+        toast.error(`O CPF ${duplicados[0].documento} já está registrado nesta mesma equipe! (Atleta: ${duplicados[0].nome})`);
+        return false;
+      }
+    }
+
+    const inserts = atletasSalvar.map(a => ({
         nome: a.nome,
         documento: a.documento,
         posicao: 'Mapeado (Súmula)',
@@ -117,10 +178,10 @@ export default function Equipes() {
         taxa_carteira: 15
       }));
 
-    if(atletasSalvar.length > 0) {
-      await supabase.from('atletas').insert(atletasSalvar);
-      // Cobranca atletas nao cobramos em lote para nao travar.
+    if(inserts.length > 0) {
+      await supabase.from('atletas').insert(inserts);
     }
+    return true;
   };
 
   const handleSalvar = async (e: React.FormEvent) => {
@@ -143,7 +204,14 @@ export default function Equipes() {
       if (error) throw error;
 
       if (data && data[0]) {
-        await processarAtletas(data[0].id, data[0].nome);
+        // Process Athletes - if false it means duplicate or invalid CPF
+        const atlSucesso = await processarAtletas(data[0].id, data[0].nome);
+        if (!atlSucesso) {
+          // Note: The team was saved, but the athletes failed. We should alert the user.
+          toast.error('A Equipe foi criada, mas alguns ATLETAS tiveram erro de CPF. Adicione-os depois.', { duration: 6000 });
+        } else {
+          toast.success('Equipe e atletas salvos!', { id: loadingToast });
+        }
 
         // Atualiza a grid
         setEquipes([{...data[0], campeonato: data[0].campeonato_nome}, ...equipes]);
@@ -151,9 +219,6 @@ export default function Equipes() {
         // Gerar cobranca se vinculado campeonato
         if (payload.campeonato_id) {
           await criarCobrancaAutomatica(payload.nome, payload.campeonato_nome!, payload.taxa_inscricao);
-          toast.success('Equipe e atletas salvos! Cobrança gerada no Financeiro.', { id: loadingToast });
-        } else {
-          toast.success('Equipe cadastrada (Sem campeonato = sem cobrança).', { id: loadingToast });
         }
       }
 
@@ -181,10 +246,14 @@ export default function Equipes() {
       if (error) throw error;
       
       // Salvar os novos atletas de elenco que o usuario registrou agora
-      await processarAtletas(equipeSelecionada.id, formData.nome);
+      const atlSucesso = await processarAtletas(equipeSelecionada.id, formData.nome);
+      if (!atlSucesso) {
+        toast.error('A Equipe foi atualizada, mas alguns novos ATLETAS tiveram erro de CPF. Tente novamente.', { duration: 6000 });
+      } else {
+        toast.success('Equipe atualizada com sucesso!', { id: loadingToast });
+      }
 
       setEquipes(equipes.map((eq: any) => eq.id === equipeSelecionada.id ? { ...eq, ...payload } : eq));
-      toast.success('Equipe atualizada com sucesso!', { id: loadingToast });
 
       setEditModalOpen(false);
       resetForm();
@@ -387,10 +456,10 @@ export default function Equipes() {
                       />
                       <input 
                         type="text" 
-                        placeholder="Documento (RG/CPF)" 
+                        placeholder="CPF" 
                         className="block w-full text-xs rounded border-slate-300 py-1.5 px-2" 
                         value={atleta.documento}
-                        onChange={e => handleAtletaChange(atleta.id, 'documento', e.target.value)}
+                        onChange={e => handleAtletaChange(atleta.id, 'documento', formatCPF(e.target.value))}
                         readOnly={atleta.isExisting}
                       />
                     </div>
@@ -483,10 +552,10 @@ export default function Equipes() {
                       />
                       <input 
                         type="text" 
-                        placeholder="Documento (RG/CPF)" 
+                        placeholder="CPF" 
                         className={`block w-full text-xs rounded border-slate-300 py-1.5 px-2 ${atleta.isExisting ? 'bg-slate-200' : ''}`} 
                         value={atleta.documento}
-                        onChange={e => handleAtletaChange(atleta.id, 'documento', e.target.value)}
+                        onChange={e => handleAtletaChange(atleta.id, 'documento', formatCPF(e.target.value))}
                         readOnly={atleta.isExisting}
                       />
                     </div>
