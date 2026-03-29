@@ -1,34 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, AlertTriangle } from 'lucide-react';
 import Modal from '../components/Modal';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function Suspensoes() {
-  const [suspensoes, setSuspensoes] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:suspensoes');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
-
+  const [suspensoes, setSuspensoes] = useState<any[]>([]);
   const [infratoresList, setInfratoresList] = useState<any[]>([]);
-
-  useEffect(() => {
-    // Mescla atletas e equipes para ser o universo alvo de infratores
-    const atletas = JSON.parse(localStorage.getItem('@nicolau:atletas') || '[]');
-    const equipes = JSON.parse(localStorage.getItem('@nicolau:equipes') || '[]');
-    const mapa = [
-      ...atletas.map((a: any) => ({ nome: a.nome, tipo_origem: 'Atleta', id_origem: a.id })),
-      ...equipes.map((e: any) => ({ nome: e.nome, tipo_origem: 'Equipe', id_origem: e.id }))
-    ];
-    setInfratoresList(mapa);
-  }, []);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormModalOpen, setFormModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
-    infrator: '', // O nome selecionado
-    tipo: 'Automática', // Automatizada pelo sistema vs Julgamento
+    infrator: '', 
+    tipo: 'Automática', 
     motivo: '',
     jogosSuspensos: 1,
     multaValor: 0,
@@ -36,77 +22,93 @@ export default function Suspensoes() {
   });
 
   useEffect(() => {
-    localStorage.setItem('@nicolau:suspensoes', JSON.stringify(suspensoes));
-  }, [suspensoes]);
+    fetchDados();
+  }, []);
 
-  const criarMultaFinanceira = (infrator: string, motivo: string, valor: number) => {
-    const cobranca = {
-      id: Date.now() + Math.random(),
-      descricao: `MULTA: ${infrator} - ${motivo}`,
-      vencimento: new Date().toLocaleDateString('pt-BR'),
-      valor: valor,
-      status: 'Debito Bloqueador', // Um status ficticio especial que acusa bloqueio
-      tipo: 'receita'
-    };
-    const fin = JSON.parse(localStorage.getItem('@nicolau:financeiro') || '[]');
-    localStorage.setItem('@nicolau:financeiro', JSON.stringify([cobranca, ...fin]));
-  };
+  const fetchDados = async () => {
+    try {
+      setLoading(true);
+      // Busca suspensoes
+      const { data: s, error: sErr } = await supabase.from('suspensoes').select('*').order('criado_em', { ascending: false });
+      if (sErr) throw sErr;
+      setSuspensoes(s || []);
 
-  const suspenderAtletaNaOrigem = (infratorNome: string) => {
-    // Altera o status do Atleta ou Equipe verdadeira no outro banco.
-    let foiAchado = false;
-    // Tenta no banco de atletas:
-    const atletas = JSON.parse(localStorage.getItem('@nicolau:atletas') || '[]');
-    const ats = atletas.map((a: any) => {
-      if(a.nome === infratorNome) { foiAchado = true; return {...a, status: 'Suspenso'}; }
-      return a;
-    });
-    if(foiAchado) localStorage.setItem('@nicolau:atletas', JSON.stringify(ats));
-
-    if(!foiAchado) { // Tenta nas Equipes
-       const equipes = JSON.parse(localStorage.getItem('@nicolau:equipes') || '[]');
-       const eqs = equipes.map((e: any) => {
-         if(e.nome === infratorNome) { return {...e, status: 'SuspensaRegras'}; }
-         return e;
-       });
-       localStorage.setItem('@nicolau:equipes', JSON.stringify(eqs));
+      // Constroi lista de infratores
+      const { data: at_raw } = await supabase.from('atletas').select('nome, id');
+      const { data: eq_raw } = await supabase.from('equipes').select('nome, id');
+      
+      const mapa = [
+        ...(at_raw || []).map(a => ({ nome: a.nome, tipo_origem: 'Atleta', id_origem: a.id })),
+        ...(eq_raw || []).map(e => ({ nome: e.nome, tipo_origem: 'Equipe', id_origem: e.id }))
+      ];
+      setInfratoresList(mapa);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar dados do tribunal');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const suspenderAtletaNaOrigem = async (infratorNome: string) => {
+    try {
+      const isAtleta = infratoresList.some(i => i.nome === infratorNome && i.tipo_origem === 'Atleta');
+      if (isAtleta) {
+        await supabase.from('atletas').update({ status: 'Suspenso' }).eq('nome', infratorNome);
+      } else {
+        await supabase.from('equipes').update({ status: 'SuspensaRegras' }).eq('nome', infratorNome);
+      }
+    } catch(err) {
+      console.error('Falha ao atualizar status na origem', err);
+    }
+  };
+
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
     if(formData.infrator === '') { toast.error("Selecione um infrator"); return; }
     
-    // Regrava a formatação pra UI do card baseada nas entradas
     const penaltyString = formData.multaValor > 0 
       ? `${formData.jogosSuspensos} Jogos + Multa R$${formData.multaValor}` 
       : `${formData.jogosSuspensos} Jogos (Sem Multa)`;
 
-    const nova = {
-      id: Date.now(),
-      infrator: formData.infrator,
-      tipo: formData.tipo,
-      motivo: formData.motivo,
-      penalidade: penaltyString,
-      status: formData.status
-    };
+    try {
+      // 1. Salvar Suspensão
+      const { error } = await supabase.from('suspensoes').insert([{
+        infrator: formData.infrator,
+        equipe: 'Julgamento Direto', // default fallback
+        campeonato: 'Todos',
+        motivo: formData.motivo,
+        penas: penaltyString,
+        multa_valor: formData.multaValor || 0,
+        status: formData.status
+      }]);
+      if (error) throw error;
 
-    // Aplica no Financeiro se tiver grana envolvida
-    if(formData.multaValor > 0) {
-      criarMultaFinanceira(formData.infrator, formData.motivo, formData.multaValor);
+      // 2. Multa financeira (Opcional)
+      if (formData.multaValor > 0) {
+        await supabase.from('financeiro').insert([{
+          descricao: `MULTA DISCIPLINAR: ${formData.infrator} - ${formData.motivo}`,
+          equipe: formData.infrator,
+          vencimento: new Date().toLocaleDateString('pt-BR'),
+          valor: formData.multaValor,
+          status: 'Debito Bloqueador',
+          tipo: 'receita'
+        }]);
+      }
+
+      // 3. Atualizar Entidade Associada
+      if (formData.status === 'Ativa') {
+        await suspenderAtletaNaOrigem(formData.infrator);
+      }
+
+      toast.success('Punição Aplicada e sincronizada na nuvem!');
+      setFormModalOpen(false);
+      resetForm();
+      fetchDados();
+    } catch (error) {
+      console.error('Erro ao salvar no tribunal:', error);
+      toast.error('Erro ao aplicar punição');
     }
-
-    // Aplica alteracao de Modulo!
-    if(formData.status === 'Ativa') {
-      suspenderAtletaNaOrigem(formData.infrator);
-    }
-
-    setSuspensoes([nova, ...suspensoes]);
-    
-    toast.success(`Punição Aplicada! \n1. Alterou status disciplinar para SUSPENSO.\n${formData.multaValor > 0 ? "2. Gerou dívida no Financeiro para bloqueio!" : ""}`, { duration: 6000 });
-    
-    setFormModalOpen(false);
-    resetForm();
   };
 
   const resetForm = () => setFormData({ infrator: '', tipo: 'Automática', motivo: '', jogosSuspensos: 1, multaValor: 0, status: 'Ativa' });
@@ -121,7 +123,7 @@ export default function Suspensoes() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Tribunal & Suspensões</h1>
-          <p className="text-sm text-slate-500 mt-1">Ao penalizar alguém, o status dele bloqueia no banco de dados geral e gera multa automática.</p>
+          <p className="text-sm text-slate-500 mt-1">Status bloqueante conectado ao banco de dados geral em Nuvem.</p>
         </div>
         <button onClick={() => { resetForm(); setFormModalOpen(true); }} className="inline-flex items-center justify-center rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 shadow-sm">
           <AlertTriangle className="-ml-1 mr-2 h-5 w-5" /> Iniciar Processo/Sanção
@@ -135,28 +137,30 @@ export default function Suspensoes() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-         {filteredItems.map((s: any) => (
-            <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-l-4 border-l-rose-500 hover:shadow-md transition-shadow">
-               <h3 className="font-bold text-slate-900 text-lg mb-1">{s.infrator}</h3>
-               <span className="text-xs bg-slate-100 text-slate-600 px-2 flex items-center mb-4 rounded-md w-fit ring-1 ring-slate-200">{s.tipo}</span>
-               
-               <p className="text-sm text-slate-600 mb-2"><b>Motivo:</b> {s.motivo}</p>
-               <p className="text-sm text-rose-800 bg-rose-50 p-2 rounded border border-rose-100 mb-4 font-semibold"><b>PENA:</b> {s.penalidade}</p>
-               
-               <div className="flex justify-between items-center text-sm border-t border-slate-100 pt-3">
-                 <span className={`font-bold ${s.status === 'Ativa' ? 'text-rose-600' : 'text-emerald-600'}`}>{s.status}</span>
-                 {s.status === 'Ativa' && <button className="text-blue-600 hover:underline">Resolver Dívida</button>}
-               </div>
-            </div>
-         ))}
-      </div>
+      {loading ? (
+        <div className="text-center p-12 bg-white rounded-xl border"><p className="text-slate-500">Carregando processos...</p></div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+           {filteredItems.map((s: any) => (
+              <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-l-4 border-l-rose-500 hover:shadow-md transition-shadow">
+                 <h3 className="font-bold text-slate-900 text-lg mb-1">{s.infrator}</h3>
+                 <span className="text-xs bg-slate-100 text-slate-600 px-2 flex items-center mb-4 rounded-md w-fit ring-1 ring-slate-200">Processo</span>
+                 
+                 <p className="text-sm text-slate-600 mb-2"><b>Motivo:</b> {s.motivo}</p>
+                 <p className="text-sm text-rose-800 bg-rose-50 p-2 rounded border border-rose-100 mb-4 font-semibold"><b>PENA:</b> {s.penas}</p>
+                 
+                 <div className="flex justify-between items-center text-sm border-t border-slate-100 pt-3">
+                   <span className={`font-bold ${s.status === 'Ativa' ? 'text-rose-600' : 'text-emerald-600'}`}>{s.status}</span>
+                 </div>
+              </div>
+           ))}
+        </div>
+      )}
 
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Nova Penalidade Relacional">
         <form onSubmit={handleSalvar} className="space-y-4">
-          
           <div className="bg-rose-50 p-3 rounded-lg border border-rose-100 mb-4">
-            <label className="block text-sm font-bold text-rose-900">Selecione o Infrator do Banco de Dados</label>
+            <label className="block text-sm font-bold text-rose-900">Selecione o Infrator da Nuvem</label>
             <select required value={formData.infrator} onChange={e => setFormData({...formData, infrator: e.target.value})} className="mt-2 block w-full rounded-md border-slate-300 px-3 py-2 sm:text-sm border">
                <option value="">-- Buscar Cadastro --</option>
                {infratoresList.map((inf, i) => (
@@ -164,14 +168,12 @@ export default function Suspensoes() {
                ))}
             </select>
           </div>
-
           <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">Motivo (Súmula)</label>
               <input required type="text" value={formData.motivo} onChange={e => setFormData({...formData, motivo: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" placeholder="Ex: Agressão ao árbitro" />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">Jogos Afastado</label>
@@ -182,14 +184,12 @@ export default function Suspensoes() {
               <input type="number" min="0" value={formData.multaValor} onChange={e => setFormData({...formData, multaValor: parseInt(e.target.value) || 0})} className="mt-1 block w-full rounded-md border-rose-300 bg-rose-50 border py-2 px-3 sm:text-sm text-rose-900 font-bold" />
             </div>
           </div>
-
           <p className="text-xs text-slate-500 italic border-t border-slate-100 pt-3">
-             Ao aplicar, o componente atualizará o status disciplinar dessa entidade bloqueando-a de jogar. Se houver multa &gt; R$0, irá estourar uma cobrança de bloqueio no Financeiro.
+             Ao aplicar, atualizaremos a entidade em nuvem. Se houver multa, um débito bloqueante de pagamento automático será emitido no Financeiro.
           </p>
-
           <div className="pt-2 flex justify-end space-x-3">
             <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white border border-slate-300 px-3 py-2 text-sm">Cancelar</button>
-            <button type="submit" className="rounded-md bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-700 shadow-sm font-bold">Autuar Infrator Vínculado</button>
+            <button type="submit" className="rounded-md bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-700 font-bold">Autuar Infrator na Nuvem</button>
           </div>
         </form>
       </Modal>

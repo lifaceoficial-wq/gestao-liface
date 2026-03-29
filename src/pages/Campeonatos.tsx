@@ -3,23 +3,11 @@ import { Plus, Search, Filter, Trophy, Users, User, Info, ChevronDown, ChevronUp
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
-
-const INITIAL_MOCK_DATA = Array.from({ length: 8 }, (_, i) => ({
-  id: i + 1,
-  nome: `Campeonato Municipal ${i + 1}`,
-  categoria: i % 2 === 0 ? 'Adulto' : 'Sub-20',
-  edicao: `202${i % 6 + 1}`,
-  periodo: 'Jan - Jun',
-  taxaInscricao: 500,
-  status: i % 3 === 0 ? 'Encerrado' : 'Ativo'
-}));
+import { supabase } from '../lib/supabase';
 
 export default function Campeonatos() {
-  const [campeonatos, setCampeonatos] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:campeonatos');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [campeonatos, setCampeonatos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,17 +33,31 @@ export default function Campeonatos() {
   });
 
   const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos'>('geral');
-  const [expandedEquipes, setExpandedEquipes] = useState<number[]>([]);
+  const [expandedEquipes, setExpandedEquipes] = useState<string[]>([]);
 
-  const toggleEquipe = (id: number) => {
+  useEffect(() => {
+    fetchCampeonatos();
+  }, []);
+
+  const fetchCampeonatos = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from('campeonatos').select('*').order('criado_em', { ascending: false });
+      if (error) throw error;
+      setCampeonatos(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar campeonatos:', error);
+      toast.error('Erro ao carregar campeonatos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleEquipe = (id: string) => {
     setExpandedEquipes(prev => 
       prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
     );
   };
-
-  useEffect(() => {
-    localStorage.setItem('@nicolau:campeonatos', JSON.stringify(campeonatos));
-  }, [campeonatos]);
 
   const filteredItems = campeonatos.filter((c: any) => 
     c.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -67,29 +69,64 @@ export default function Campeonatos() {
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const novo = {
-      id: Date.now(),
-      ...formData
-    };
-    setCampeonatos([novo, ...campeonatos]);
-    setFormModalOpen(false);
-    resetForm();
+    try {
+      const { error } = await supabase.from('campeonatos').insert([{
+        nome: formData.nome,
+        categoria: formData.categoria,
+        edicao: formData.edicao,
+        periodo: formData.periodo,
+        taxa_inscricao: formData.taxaInscricao,
+        status: formData.status
+      }]);
+      if (error) throw error;
+      toast.success('Campeonato criado com sucesso!');
+      setFormModalOpen(false);
+      resetForm();
+      fetchCampeonatos();
+    } catch (error) {
+      console.error('Erro ao salvar campeonato', error);
+      toast.error('Erro ao salvar campeonato.');
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCampeonatos(campeonatos.map((c: any) => c.id === campeonatoSelecionado.id ? { ...c, ...formData } : c));
-    setEditModalOpen(false);
-    resetForm();
-  };
-
-  const excluirCampeonato = () => {
-    if (confirm('Tem certeza que deseja excluir este campeonato?')) {
-      setCampeonatos(campeonatos.filter((c: any) => c.id !== campeonatoSelecionado.id));
+    try {
+      const { error } = await supabase.from('campeonatos').update({
+        nome: formData.nome,
+        categoria: formData.categoria,
+        edicao: formData.edicao,
+        periodo: formData.periodo,
+        taxa_inscricao: formData.taxaInscricao,
+        status: formData.status
+      }).eq('id', campeonatoSelecionado.id);
+      
+      if (error) throw error;
+      toast.success('Campeonato atualizado com sucesso!');
       setEditModalOpen(false);
       resetForm();
+      fetchCampeonatos();
+    } catch (error) {
+      console.error('Erro ao atualizar campeonato', error);
+      toast.error('Erro ao editar campeonato.');
+    }
+  };
+
+  const excluirCampeonato = async () => {
+    if (confirm('Tem certeza que deseja excluir este campeonato?')) {
+      try {
+        const { error } = await supabase.from('campeonatos').delete().eq('id', campeonatoSelecionado.id);
+        if (error) throw error;
+        toast.success('Campeonato excluído!');
+        setEditModalOpen(false);
+        resetForm();
+        fetchCampeonatos();
+      } catch (error) {
+        console.error('Erro ao excluir', error);
+        toast.error('Erro ao excluir campeonato.');
+      }
     }
   };
 
@@ -112,54 +149,55 @@ export default function Campeonatos() {
       categoria: campeonato.categoria,
       edicao: campeonato.edicao,
       periodo: campeonato.periodo,
-      taxaInscricao: campeonato.taxaInscricao || 500,
+      taxaInscricao: campeonato.taxa_inscricao || 500,
       status: campeonato.status
     });
     setEditModalOpen(true);
   };
 
-  const abrirDetalhes = (campeonato: any) => {
+  const abrirDetalhes = async (campeonato: any) => {
     setCampeonatoSelecionado(campeonato);
     setHistoricoTab('geral');
     setExpandedEquipes([]);
     
-    // Buscar equipes eletas do localStorage pra relacionar
-    const eq = JSON.parse(localStorage.getItem('@nicolau:equipes') || '[]');
-    const at = JSON.parse(localStorage.getItem('@nicolau:atletas') || '[]');
-    
-    // Equipes que estão neste campeonato
-    const eqscamp = eq.filter((e: any) => e.campeonato === campeonato.nome);
-    setEquipesCampeonato(eqscamp);
-    
-    // Atletas que estão nestas equipes
-    const nomesEquipes = eqscamp.map((e: any) => e.nome);
-    const atscamp = at.filter((a: any) => nomesEquipes.includes(a.equipe));
-    setAtletasCampeonato(atscamp);
+    try {
+      // Buscar equipes
+      const { data: eq } = await supabase.from('equipes').select('*').eq('campeonato_id', campeonato.id);
+      setEquipesCampeonato(eq || []);
+      
+      // Buscar atletas
+      const eqNames = (eq || []).map(e => e.nome);
+      const { data: at } = await supabase.from('atletas').select('*').in('equipe_nome', eqNames.length ? eqNames : ['_NONE_']);
+      setAtletasCampeonato(at || []);
 
-    const jg = JSON.parse(localStorage.getItem('@nicolau:jogos') || '[]');
-    setJogosCampeonato(jg.filter((j: any) => j.campeonato === campeonato.nome && (j.status === 'Encerrado' || j.status === 'W.O')));
-
-    setDetalhesModalOpen(true);
+      // Buscar jogos
+      const { data: jg } = await supabase.from('jogos').select('*').eq('campeonato_id', campeonato.id);
+      setJogosCampeonato((jg || []).filter(j => j.status === 'Encerrado' || j.status === 'W.O'));
+      
+      setDetalhesModalOpen(true);
+    } catch(err) {
+      toast.error('Erro ao buscar dados do histórico');
+    }
   };
 
   const getClassificacao = () => {
     const stats: Record<string, any> = {};
     equipesCampeonato.forEach(eq => stats[eq.nome] = { nome: eq.nome, P: 0, J: 0, V: 0, E: 0, D: 0, GP: 0, GC: 0, SG: 0 });
     jogosCampeonato.forEach(jogo => {
-      const gA = jogo.golsA || 0; const gB = jogo.golsB || 0;
-      if(stats[jogo.equipeA]) {
-        stats[jogo.equipeA].J++; stats[jogo.equipeA].GP += gA; stats[jogo.equipeA].GC += gB;
-        if(gA > gB) { stats[jogo.equipeA].V++; stats[jogo.equipeA].P += 3; }
-        else if(gA === gB) { stats[jogo.equipeA].E++; stats[jogo.equipeA].P += 1; }
-        else { stats[jogo.equipeA].D++; }
-        stats[jogo.equipeA].SG = stats[jogo.equipeA].GP - stats[jogo.equipeA].GC;
+      const gA = jogo.gols_a || 0; const gB = jogo.gols_b || 0;
+      if(stats[jogo.equipe_a_nome]) {
+        stats[jogo.equipe_a_nome].J++; stats[jogo.equipe_a_nome].GP += gA; stats[jogo.equipe_a_nome].GC += gB;
+        if(gA > gB) { stats[jogo.equipe_a_nome].V++; stats[jogo.equipe_a_nome].P += 3; }
+        else if(gA === gB) { stats[jogo.equipe_a_nome].E++; stats[jogo.equipe_a_nome].P += 1; }
+        else { stats[jogo.equipe_a_nome].D++; }
+        stats[jogo.equipe_a_nome].SG = stats[jogo.equipe_a_nome].GP - stats[jogo.equipe_a_nome].GC;
       }
-      if(stats[jogo.equipeB]) {
-        stats[jogo.equipeB].J++; stats[jogo.equipeB].GP += gB; stats[jogo.equipeB].GC += gA;
-        if(gB > gA) { stats[jogo.equipeB].V++; stats[jogo.equipeB].P += 3; }
-        else if(gB === gA) { stats[jogo.equipeB].E++; stats[jogo.equipeB].P += 1; }
-        else { stats[jogo.equipeB].D++; }
-        stats[jogo.equipeB].SG = stats[jogo.equipeB].GP - stats[jogo.equipeB].GC;
+      if(stats[jogo.equipe_b_nome]) {
+        stats[jogo.equipe_b_nome].J++; stats[jogo.equipe_b_nome].GP += gB; stats[jogo.equipe_b_nome].GC += gA;
+        if(gB > gA) { stats[jogo.equipe_b_nome].V++; stats[jogo.equipe_b_nome].P += 3; }
+        else if(gB === gA) { stats[jogo.equipe_b_nome].E++; stats[jogo.equipe_b_nome].P += 1; }
+        else { stats[jogo.equipe_b_nome].D++; }
+        stats[jogo.equipe_b_nome].SG = stats[jogo.equipe_b_nome].GP - stats[jogo.equipe_b_nome].GC;
       }
     });
     return Object.values(stats).sort((a: any, b: any) => {
@@ -176,13 +214,13 @@ export default function Campeonatos() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Módulo: Campeonatos</h1>
-          <p className="text-sm text-slate-500 mt-1">Gerencie os campeonatos da liga.</p>
+          <p className="text-sm text-slate-500 mt-1">Gerencie os campeonatos da liga integrados à nuvem.</p>
         </div>
         <button 
           onClick={() => { resetForm(); setFormModalOpen(true); }}
-          className="inline-flex w-full sm:w-auto items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="inline-flex w-full sm:w-auto items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
         >
-          <Plus className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
+          <Plus className="-ml-1 mr-2 h-5 w-5" />
           Novo Campeonato
         </button>
       </div>
@@ -190,30 +228,22 @@ export default function Campeonatos() {
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="relative w-full sm:flex-1 sm:max-w-md">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-5 w-5 text-slate-400" aria-hidden="true" />
+            <Search className="h-5 w-5 text-slate-400" />
           </div>
           <input
             type="text"
-            className="block w-full rounded-md border-0 py-1.5 pl-10 pr-3 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
-            placeholder="Buscar por nome, categoria ou edição..."
+            className="block w-full rounded-md border-0 py-1.5 pl-10 pr-3 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm"
+            placeholder="Buscar campeonatos..."
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
           />
         </div>
-        <button 
-          onClick={() => toast('Filtros avançados (Backend)', { icon: 'ℹ️' })}
-          className="inline-flex w-full sm:w-auto justify-center items-center gap-x-1.5 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
-        >
-          <Filter className="-ml-0.5 h-5 w-5 text-slate-400" aria-hidden="true" />
-          Filtros
-        </button>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {filteredItems.length === 0 ? (
+        {loading ? (
+           <div className="text-center p-12"><p className="text-slate-500">Carregando campeonatos do banco de dados...</p></div>
+        ) : filteredItems.length === 0 ? (
           <div className="text-center p-12">
             <p className="text-slate-500">Nenhum campeonato encontrado.</p>
           </div>
@@ -226,9 +256,7 @@ export default function Campeonatos() {
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Ano/Edição</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Período</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Status</th>
-                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 whitespace-nowrap text-right">
-                  Ações
-                </th>
+                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 whitespace-nowrap text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
@@ -247,11 +275,11 @@ export default function Campeonatos() {
                   </td>
                   <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => abrirDetalhes(campeonato)} className="inline-flex items-center text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-2.5 py-1.5 rounded-md border border-emerald-200 hover:bg-emerald-100 transition-colors">
+                      <button onClick={() => abrirDetalhes(campeonato)} className="inline-flex items-center text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-2.5 py-1.5 rounded-md border border-emerald-200 hover:bg-emerald-100">
                         <Info className="h-4 w-4 mr-1" />
                         Histórico
                       </button>
-                      <button onClick={() => abrirEditar(campeonato)} className="inline-flex items-center text-blue-600 hover:text-blue-900 bg-white px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors">
+                      <button onClick={() => abrirEditar(campeonato)} className="inline-flex items-center text-blue-600 hover:text-blue-900 bg-white px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50">
                         Editar
                       </button>
                     </div>
@@ -261,171 +289,68 @@ export default function Campeonatos() {
             </tbody>
           </table>
         )}
-        
-        {totalPages > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={totalItems}
-            itemsPerPage={itemsPerPage}
-          />
-        )}
+        {totalPages > 1 && <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} totalItems={totalItems} itemsPerPage={itemsPerPage} />}
       </div>
 
-      {/* MODAL - NOVO CAMPEONATO */}
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Cadastrar Novo Campeonato">
         <form onSubmit={handleSalvar} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Nome</label>
-            <input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" placeholder="Ex: Copa da Liga" />
-          </div>
+          <div><label className="block text-sm font-medium text-slate-700">Nome</label><input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Categoria</label>
-              <select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                <option>Adulto</option>
-                <option>Aspirante</option>
-                <option>Sub-20</option>
-                <option>Veterano</option>
-                <option>Feminino</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Edição (Ano)</label>
-              <input required type="text" value={formData.edicao} onChange={e => setFormData({...formData, edicao: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" placeholder="Ex: 2025" />
-            </div>
+            <div><label className="block text-sm font-medium text-slate-700">Categoria</label><select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Adulto</option><option>Aspirante</option><option>Sub-20</option><option>Veterano</option><option>Feminino</option></select></div>
+            <div><label className="block text-sm font-medium text-slate-700">Edição (Ano)</label><input required type="text" value={formData.edicao} onChange={e => setFormData({...formData, edicao: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Período</label>
-              <input required type="text" value={formData.periodo} onChange={e => setFormData({...formData, periodo: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" placeholder="Ex: Jan - Dez" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-blue-700">Taxa Inscrição (R$)</label>
-              <input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-blue-50" placeholder="R$" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Status Inicial</label>
-              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                <option>Ativo</option>
-                <option>Em Breve</option>
-                <option>Encerrado</option>
-              </select>
-            </div>
+            <div><label className="block text-sm font-medium text-slate-700">Período</label><input required type="text" value={formData.periodo} onChange={e => setFormData({...formData, periodo: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
+            <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
+            <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
           <div className="pt-4 flex justify-end space-x-3 border-t border-slate-100 mt-6">
-            <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">Cancelar</button>
+            <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm border hover:bg-slate-50">Cancelar</button>
             <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Salvar Campeonato</button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL - EDITAR CAMPEONATO */}
       <Modal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} title="Editar Campeonato">
         <form onSubmit={handleEditar} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Nome</label>
-            <input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
-          </div>
+           <div><label className="block text-sm font-medium text-slate-700">Nome</label><input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Categoria</label>
-              <select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                <option>Adulto</option>
-                <option>Aspirante</option>
-                <option>Sub-20</option>
-                <option>Veterano</option>
-                <option>Feminino</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Edição (Ano)</label>
-              <input required type="text" value={formData.edicao} onChange={e => setFormData({...formData, edicao: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
-            </div>
+            <div><label className="block text-sm font-medium text-slate-700">Categoria</label><select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Adulto</option><option>Aspirante</option><option>Sub-20</option><option>Veterano</option><option>Feminino</option></select></div>
+            <div><label className="block text-sm font-medium text-slate-700">Edição (Ano)</label><input required type="text" value={formData.edicao} onChange={e => setFormData({...formData, edicao: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Período</label>
-              <input required type="text" value={formData.periodo} onChange={e => setFormData({...formData, periodo: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-blue-700">Taxa Inscrição (R$)</label>
-              <input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm bg-blue-50" placeholder="R$" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Status</label>
-              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                <option>Ativo</option>
-                <option>Em Breve</option>
-                <option>Encerrado</option>
-              </select>
-            </div>
+            <div><label className="block text-sm font-medium text-slate-700">Período</label><input required type="text" value={formData.periodo} onChange={e => setFormData({...formData, periodo: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
+            <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
+            <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
-          
           <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-6">
-            <button type="button" onClick={excluirCampeonato} className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100 transition-colors">
-              Excluir
-            </button>
+            <button type="button" onClick={excluirCampeonato} className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100">Excluir</button>
             <div className="flex space-x-3">
-              <button type="button" onClick={() => setEditModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">Cancelar</button>
-              <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Atualizar</button>
+              <button type="button" onClick={() => setEditModalOpen(false)} className="rounded-md bg-white border border-slate-300 px-3 py-2 text-sm">Cancelar</button>
+              <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500">Atualizar</button>
             </div>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL - HISTORICO E DETALHES */}
-      <Modal 
-        isOpen={isDetalhesModalOpen} 
-        onClose={() => setDetalhesModalOpen(false)} 
-        title={`Histórico: ${campeonatoSelecionado?.nome}`}
-        maxWidth="max-w-5xl"
-      >
+      <Modal isOpen={isDetalhesModalOpen} onClose={() => setDetalhesModalOpen(false)} title={`Histórico: ${campeonatoSelecionado?.nome}`} maxWidth="max-w-5xl">
         <div className="space-y-6 flex flex-col h-full">
-          {/* Menu de Tabs */}
           <div className="flex border-b border-slate-200">
-            <button 
-              type="button"
-              className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-              onClick={() => setHistoricoTab('geral')}
-            >
-              Visão Geral & Tabela
-            </button>
-            <button 
-              type="button"
-              className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-              onClick={() => setHistoricoTab('elencos')}
-            >
-              Elencos Oficiais
-            </button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('geral')}>Visão Geral & Tabela</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('elencos')}>Elencos Oficiais</button>
           </div>
-
-          {/* TAB 1: VISÃO GERAL */}
           {historicoTab === 'geral' && (
             <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar">
-              {/* Dashboard Stats */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center">
-                  <div className="rounded-full bg-blue-100 p-3 mr-4">
-                    <Trophy className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">Equipes INSCRITAS</p>
-                    <p className="text-2xl font-bold text-blue-700">{equipesCampeonato.length}</p>
-                  </div>
+                  <div className="rounded-full bg-blue-100 p-3 mr-4"><Trophy className="h-6 w-6 text-blue-600" /></div>
+                  <div><p className="text-sm font-medium text-blue-900">Equipes INSCRITAS</p><p className="text-2xl font-bold text-blue-700">{equipesCampeonato.length}</p></div>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex items-center">
-                  <div className="rounded-full bg-emerald-100 p-3 mr-4">
-                    <Users className="h-6 w-6 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-emerald-900">Atletas Mapeados</p>
-                    <p className="text-2xl font-bold text-emerald-700">{atletasCampeonato.length}</p>
-                  </div>
+                  <div className="rounded-full bg-emerald-100 p-3 mr-4"><Users className="h-6 w-6 text-emerald-600" /></div>
+                  <div><p className="text-sm font-medium text-emerald-900">Atletas Mapeados</p><p className="text-2xl font-bold text-emerald-700">{atletasCampeonato.length}</p></div>
                 </div>
               </div>
-
               {equipesCampeonato.length > 0 && (
                 <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm mb-6">
                   <div className="bg-slate-900 px-4 py-3 flex justify-between items-center text-white">
@@ -435,27 +360,19 @@ export default function Campeonatos() {
                     <table className="min-w-full divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th className="px-4 py-2 text-left font-semibold text-slate-500">POS</th>
-                          <th className="px-4 py-2 text-left font-semibold text-slate-500">EQUIPE</th>
-                          <th className="px-4 py-2 text-center font-bold text-slate-900 bg-slate-100">P</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">J</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">V</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">E</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">D</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">SG</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-500">POS</th><th className="px-4 py-2 text-left font-semibold text-slate-500">EQUIPE</th>
+                          <th className="px-4 py-2 text-center font-bold text-slate-900 bg-slate-100">P</th><th className="px-4 py-2 text-center font-semibold text-slate-500">J</th>
+                          <th className="px-4 py-2 text-center font-semibold text-slate-500">V</th><th className="px-4 py-2 text-center font-semibold text-slate-500">E</th>
+                          <th className="px-4 py-2 text-center font-semibold text-slate-500">D</th><th className="px-4 py-2 text-center font-semibold text-slate-500">SG</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {tabelaClassificacao.map((row: any, i) => (
                           <tr key={row.nome} className={i < 4 ? "bg-emerald-50/30" : ""}>
-                            <td className="px-4 py-2 font-bold text-slate-700">{i + 1}º</td>
-                            <td className="px-4 py-2 font-bold text-slate-800">{row.nome}</td>
-                            <td className="px-4 py-2 text-center font-black bg-slate-50">{row.P}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.J}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.V}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.E}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.D}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.SG}</td>
+                            <td className="px-4 py-2 font-bold text-slate-700">{i + 1}º</td><td className="px-4 py-2 font-bold text-slate-800">{row.nome}</td>
+                            <td className="px-4 py-2 text-center font-black bg-slate-50">{row.P}</td><td className="px-4 py-2 text-center text-slate-600">{row.J}</td>
+                            <td className="px-4 py-2 text-center text-slate-600">{row.V}</td><td className="px-4 py-2 text-center text-slate-600">{row.E}</td>
+                            <td className="px-4 py-2 text-center text-slate-600">{row.D}</td><td className="px-4 py-2 text-center text-slate-600">{row.SG}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -465,61 +382,25 @@ export default function Campeonatos() {
               )}
             </div>
           )}
-
-          {/* TAB 2: ELENCOS (ACORDEÃO) */}
           {historicoTab === 'elencos' && (
             <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-              <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-2">
-                <Users className="h-5 w-5 text-slate-400" />
-                Elencos Oficiais do Campeonato
-              </h3>
-              
-              {equipesCampeonato.length === 0 ? (
-                <div className="text-center py-6 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-slate-500">Nenhuma equipe confirmada neste campeonato ainda.</p>
-                </div>
-              ) : (
-                equipesCampeonato.map((equipe: any) => {
-                  const jogadores = atletasCampeonato.filter((a: any) => a.equipe === equipe.nome);
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-2"><Users className="h-5 w-5 text-slate-400" /> Elencos Oficiais do Campeonato</h3>
+              {equipesCampeonato.map((equipe: any) => {
+                  const jogadores = atletasCampeonato.filter((a: any) => a.equipe_id === equipe.id || a.equipe_nome === equipe.nome);
                   const isExpanded = expandedEquipes.includes(equipe.id);
-
                   return (
                     <div key={equipe.id} className="border border-slate-200 rounded-lg overflow-hidden shadow-sm transition-all duration-200">
-                      <button 
-                        type="button"
-                        onClick={() => toggleEquipe(equipe.id)}
-                        className={`w-full px-4 py-3 flex justify-between items-center text-left transition-colors ${isExpanded ? 'bg-blue-50 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isExpanded ? 'bg-blue-200' : 'bg-slate-100'}`}>
-                            <Users className={`h-4 w-4 ${isExpanded ? 'text-blue-700' : 'text-slate-500'}`} />
-                          </div>
-                          <h4 className={`font-bold text-base ${isExpanded ? 'text-blue-900' : 'text-slate-800'}`}>{equipe.nome}</h4>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm border ${isExpanded ? 'bg-white border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600'}`}>
-                            {jogadores.length} atleta{jogadores.length !== 1 && 's'}
-                          </span>
-                          {isExpanded ? <ChevronUp className="h-5 w-5 text-blue-600" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
-                        </div>
+                      <button type="button" onClick={() => toggleEquipe(equipe.id)} className={`w-full px-4 py-3 flex justify-between items-center text-left ${isExpanded ? 'bg-blue-50 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
+                        <div className="flex items-center gap-3"><div className={`h-8 w-8 rounded-full flex items-center justify-center ${isExpanded ? 'bg-blue-200' : 'bg-slate-100'}`}><Users className="h-4 w-4" /></div><h4 className="font-bold">{equipe.nome}</h4></div>
+                        <div className="flex items-center gap-3"><span className="text-xs font-semibold px-3 py-1 rounded-full shadow-sm border bg-white">{jogadores.length} atletas</span>{isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
                       </button>
-                      
                       {isExpanded && (
                         <div className="p-4 bg-slate-50 border-t border-slate-100">
-                          {jogadores.length === 0 ? (
-                            <p className="text-sm text-slate-400 italic text-center py-6 bg-white rounded border border-slate-100">Nenhum atleta cadastrado nesta equipe.</p>
-                          ) : (
+                          {jogadores.length === 0 ? <p className="text-sm text-slate-400 italic text-center py-6">Nenhum atleta cadastrado.</p> : (
                             <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                               {jogadores.map((jogador: any) => (
-                                <li key={jogador.id} className="flex flex-col text-sm text-slate-700 bg-white p-2.5 rounded-md border border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all">
-                                  <div className="flex items-start gap-2">
-                                    <User className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                                    <span className="font-semibold text-slate-800 break-words leading-tight">{jogador.nome}</span>
-                                  </div>
-                                  <span className="text-xs text-slate-500 ml-6 flex gap-1.5 items-center mt-1">
-                                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">{jogador.posicao || 'Posição N/A'}</span>
-                                    {jogador.documento && (<span className="opacity-70 text-[10px]">&bull; DOC: {jogador.documento.slice(-4)}</span>)}
-                                  </span>
+                                <li key={jogador.id} className="flex flex-col text-sm text-slate-700 bg-white p-2.5 rounded-md border border-slate-200 hover:border-blue-300">
+                                  <div className="flex items-start gap-2"><User className="h-4 w-4 text-slate-400 mt-0.5" /><span className="font-semibold">{jogador.nome}</span></div>
                                 </li>
                               ))}
                             </ul>
@@ -528,19 +409,14 @@ export default function Campeonatos() {
                       )}
                     </div>
                   )
-                })
-              )}
+                })}
             </div>
           )}
-          
           <div className="pt-4 flex justify-end border-t border-slate-100">
-            <button type="button" onClick={() => setDetalhesModalOpen(false)} className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">
-              Fechar
-            </button>
+            <button type="button" onClick={() => setDetalhesModalOpen(false)} className="rounded-md bg-white border px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm">Fechar</button>
           </div>
         </div>
       </Modal>
-
     </div>
   );
 }

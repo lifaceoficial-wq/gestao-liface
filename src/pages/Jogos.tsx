@@ -1,40 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, ShieldAlert, Trophy, PlayCircle, Clock, CheckCircle, XCircle, Calendar as CalendarIcon } from 'lucide-react';
 import Modal from '../components/Modal';
+import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function Jogos() {
-  const [jogos, setJogos] = useState<any[]>(() => {
-    const saved = localStorage.getItem('@nicolau:jogos');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
+  const [jogos, setJogos] = useState<any[]>([]);
   const [campeonatos, setCampeonatos] = useState<any[]>([]);
   const [equipes, setEquipes] = useState<any[]>([]);
   const [atletas, setAtletas] = useState<any[]>([]);
-
-  useEffect(() => {
-    setCampeonatos(JSON.parse(localStorage.getItem('@nicolau:campeonatos') || '[]'));
-    setEquipes(JSON.parse(localStorage.getItem('@nicolau:equipes') || '[]'));
-    setAtletas(JSON.parse(localStorage.getItem('@nicolau:atletas') || '[]'));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('@nicolau:jogos', JSON.stringify(jogos));
-  }, [jogos]);
+  const [loading, setLoading] = useState(true);
 
   const [filtroCamp, setFiltroCamp] = useState('');
   
   // Modal de Novo Jogo
   const [isFormModalOpen, setFormModalOpen] = useState(false);
   const [formData, setFormData] = useState({
-    campeonato: '',
+    campeonato_nome: '',
     rodada: '1ª Rodada',
     data: '',
     hora: '',
     quadra: '',
-    equipeA: '',
-    equipeB: ''
+    equipe_a_nome: '',
+    equipe_b_nome: ''
   });
 
   // Modal de Sumula
@@ -47,164 +35,258 @@ export default function Jogos() {
   const [eventosSumula, setEventosSumula] = useState<any[]>([]);
   const [novoEvento, setNovoEvento] = useState({ equipe: '', jogador: '', tipo: 'Gol', tempo: '' });
 
-  const equipesFiltradasCamp = equipes.filter(e => e.campeonato === formData.campeonato);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const handleSalvarJogo = (e: React.FormEvent) => {
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch Campeonatos
+      const { data: camps } = await supabase.from('campeonatos').select('*');
+      if (camps) setCampeonatos(camps);
+
+      // Fetch Equipes
+      const { data: eqs } = await supabase.from('equipes').select('*');
+      if (eqs) setEquipes(eqs);
+
+      // Fetch Atletas
+      const { data: atls } = await supabase.from('atletas').select('*');
+      if (atls) setAtletas(atls);
+
+      // Fetch Jogos with eventos
+      const { data: jgs, error } = await supabase
+        .from('jogos')
+        .select(`
+          *,
+          eventos:eventos_jogo(*)
+        `)
+        .order('data', { ascending: false });
+
+      if (error) throw error;
+      setJogos(jgs || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar dados.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const equipesFiltradasCamp = equipes.filter(e => e.campeonato_nome === formData.campeonato_nome);
+
+  const handleSalvarJogo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.equipeA === formData.equipeB) {
+    if (formData.equipe_a_nome === formData.equipe_b_nome) {
       toast.error('O time A não pode ser igual ao time B!');
       return;
     }
-    const novo = {
-      id: Date.now(),
-      ...formData,
-      status: 'Agendado',
-      golsA: 0,
-      golsB: 0,
-      eventos: []
-    };
-    setJogos([novo, ...jogos]);
-    toast.success('Partida agendada com sucesso!');
-    setFormModalOpen(false);
+
+    const campeonato = campeonatos.find(c => c.nome === formData.campeonato_nome);
+    const equipeA = equipes.find(eq => eq.nome === formData.equipe_a_nome);
+    const equipeB = equipes.find(eq => eq.nome === formData.equipe_b_nome);
+
+    if (!campeonato || !equipeA || !equipeB) {
+      toast.error('Dados de campeonato ou equipes inválidos!');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('jogos').insert([{
+        campeonato_id: campeonato.id,
+        campeonato_nome: campeonato.nome,
+        equipe_a_id: equipeA.id,
+        equipe_a_nome: equipeA.nome,
+        equipe_b_id: equipeB.id,
+        equipe_b_nome: equipeB.nome,
+        rodada: formData.rodada,
+        data: formData.data,
+        hora: formData.hora,
+        quadra: formData.quadra,
+        status: 'Agendado',
+        gols_a: 0,
+        gols_b: 0
+      }]);
+
+      if (error) throw error;
+
+      toast.success('Partida agendada com sucesso!');
+      setFormModalOpen(false);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao agendar partida.');
+    }
   };
 
   const abrirSumula = (jogo: any) => {
     setJogoSumula(jogo);
-    setSumulaPlacarA(jogo.golsA || 0);
-    setSumulaPlacarB(jogo.golsB || 0);
+    setSumulaPlacarA(jogo.gols_a || 0);
+    setSumulaPlacarB(jogo.gols_b || 0);
     setEventosSumula(jogo.eventos || []);
-    setNovoEvento({ equipe: jogo.equipeA, jogador: '', tipo: 'Gol', tempo: '' });
+    setNovoEvento({ equipe: jogo.equipe_a_nome, jogador: '', tipo: 'Gol', tempo: '' });
     setSumulaModalOpen(true);
   };
 
-  const adicionarEvento = () => {
+  const adicionarEvento = async () => {
     if (!novoEvento.jogador || !novoEvento.tempo) {
       toast.error('Preencha jogador e tempo do evento');
       return;
     }
     
-    // Auto incrementa placar se for gol
-    if(novoEvento.tipo === 'Gol') {
-      if(novoEvento.equipe === jogoSumula.equipeA) setSumulaPlacarA(prev => prev + 1);
-      else setSumulaPlacarB(prev => prev + 1);
-    }
-
-    setEventosSumula([...eventosSumula, { id: Date.now(), ...novoEvento }]);
-    // Reset inputs
-    setNovoEvento({ ...novoEvento, jogador: '', tempo: '' });
-    toast.success(`${novoEvento.tipo} registrado aos ${novoEvento.tempo}!`);
-  };
-
-  const excluirEvento = (id: number, evento: any) => {
-    setEventosSumula(eventosSumula.filter(e => e.id !== id));
-    if(evento.tipo === 'Gol') {
-      if(evento.equipe === jogoSumula.equipeA) setSumulaPlacarA(prev => Math.max(0, prev - 1));
-      else setSumulaPlacarB(prev => Math.max(0, prev - 1));
-    }
-  };
-
-  const encerrarSumula = () => {
-    if(confirm('Tem certeza que deseja encerrar esta súmula? Não poderá mais alterar dados na interface simplificada.')) {
-      const updatedMatch = {
-        ...jogoSumula,
-        golsA: sumulaPlacarA,
-        golsB: sumulaPlacarB,
-        eventos: eventosSumula,
-        status: 'Encerrado'
+    try {
+      const eventoToInsert = {
+        jogo_id: jogoSumula.id,
+        equipe: novoEvento.equipe,
+        jogador: novoEvento.jogador,
+        tipo: novoEvento.tipo,
+        tempo: novoEvento.tempo
       };
 
-      const todosJogosAtualizados = jogos.map(j => j.id === updatedMatch.id ? updatedMatch : j);
-      setJogos(todosJogosAtualizados);
+      const { data: evData, error } = await supabase.from('eventos_jogo').insert([eventoToInsert]).select().single();
+      if (error) throw error;
 
-      // GATILHO FUTSAL: Disparar suspensões automáticas
-      const suspensoes = JSON.parse(localStorage.getItem('@nicolau:suspensoes') || '[]');
-      let salvouSusp = false;
+      // Auto incrementa placar se for gol (apenas local por enquanto, salvará ao encerrar)
+      if(novoEvento.tipo === 'Gol') {
+        if(novoEvento.equipe === jogoSumula.equipe_a_nome) setSumulaPlacarA(prev => prev + 1);
+        else setSumulaPlacarB(prev => prev + 1);
+      }
 
-      eventosSumula.forEach(ev => {
-        if(ev.tipo === 'Vermelho') {
-          suspensoes.push({
-            id: Date.now() + Math.random(),
+      setEventosSumula([...eventosSumula, evData]);
+      setNovoEvento({ ...novoEvento, jogador: '', tempo: '' });
+      toast.success(`${novoEvento.tipo} registrado aos ${novoEvento.tempo}!`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao registrar evento.');
+    }
+  };
+
+  const excluirEvento = async (id: string, evento: any) => {
+    try {
+      const { error } = await supabase.from('eventos_jogo').delete().eq('id', id);
+      if (error) throw error;
+
+      setEventosSumula(eventosSumula.filter(e => e.id !== id));
+      if(evento.tipo === 'Gol') {
+        if(evento.equipe === jogoSumula.equipe_a_nome) setSumulaPlacarA(prev => Math.max(0, prev - 1));
+        else setSumulaPlacarB(prev => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao excluir evento.');
+    }
+  };
+
+  const encerrarSumula = async () => {
+    if(!confirm('Tem certeza que deseja encerrar esta súmula? Não poderá mais alterar dados na interface simplificada.')) return;
+
+    try {
+      // 1. Atualizar Jogo
+      const { error: jogoErr } = await supabase.from('jogos').update({
+        gols_a: sumulaPlacarA,
+        gols_b: sumulaPlacarB,
+        status: 'Encerrado'
+      }).eq('id', jogoSumula.id);
+
+      if (jogoErr) throw jogoErr;
+
+      // 2. GATILHO FUTSAL: Disparar suspensões automáticas
+      for (const ev of eventosSumula) {
+        if (ev.tipo === 'Vermelho') {
+          await supabase.from('suspensoes').insert([{
             infrator: ev.jogador,
             equipe: ev.equipe,
-            campeonato: updatedMatch.campeonato,
-            motivo: `Cartão Vermelho direto na partida ${updatedMatch.equipeA} x ${updatedMatch.equipeB} (${updatedMatch.data})`,
-            dataFato: updatedMatch.data,
+            campeonato: jogoSumula.campeonato_nome,
+            motivo: `Cartão Vermelho direto na partida ${jogoSumula.equipe_a_nome} x ${jogoSumula.equipe_b_nome} (${new Date(jogoSumula.data).toLocaleDateString()})`,
+            data_fato: jogoSumula.data,
             penas: 'Suspensão Automática - 1 Jogo',
             status: 'Suspenso',
-            multaValor: 30 // Taxa de vermelho
-          });
-          salvouSusp = true;
-          toast.error(`ATENÇÃO: ${ev.jogador} recebeu Vermelho e já foi lançado no Tribunal!`, { duration: 6000 });
-        }
-        if(ev.tipo === 'Amarelo') {
-          // Conta amarelos neste campeonato (incluindo o que acabou de tomar)
-          let yellowCount = 0;
-          todosJogosAtualizados.filter(j => j.campeonato === updatedMatch.campeonato).forEach(pm => {
-            pm.eventos.forEach((pe: any) => {
-              if(pe.jogador === ev.jogador && pe.tipo === 'Amarelo') yellowCount++;
-            });
-          });
+            multa_valor: 30
+          }]);
+          toast.error(`ATENÇÃO: ${ev.jogador} recebeu Vermelho e já foi lançado no Tribunal!`);
+        } else if (ev.tipo === 'Amarelo') {
+          // Precisamos contar amarelos do jogador neste campeonato
+          // Todos os eventos_jogo desse campeonato
+          const queryJogosCamp = jogos.filter(j => j.campeonato_nome === jogoSumula.campeonato_nome).map(j => j.id);
+          let yellowCount = 1; // Já conta o current
+          
+          if (queryJogosCamp.length > 0) {
+            const { data: allEvs } = await supabase
+              .from('eventos_jogo')
+              .select('*')
+              .in('jogo_id', queryJogosCamp)
+              .eq('jogador', ev.jogador)
+              .eq('tipo', 'Amarelo');
+              
+            if (allEvs) yellowCount = allEvs.length; // O count real (pois o evento current já está no banco)
+          }
 
-          if(yellowCount > 0 && yellowCount % 3 === 0) {
-            suspensoes.push({
-              id: Date.now() + Math.random(),
+          if (yellowCount > 0 && yellowCount % 3 === 0) {
+            await supabase.from('suspensoes').insert([{
               infrator: ev.jogador,
               equipe: ev.equipe,
-              campeonato: updatedMatch.campeonato,
-              motivo: `Acúmulo de 3 Cartões Amarelos na data ${updatedMatch.data}`,
-              dataFato: updatedMatch.data,
+              campeonato: jogoSumula.campeonato_nome,
+              motivo: `Acúmulo de 3 Cartões Amarelos na data ${new Date(jogoSumula.data).toLocaleDateString()}`,
+              data_fato: jogoSumula.data,
               penas: 'Suspensão Automática - 1 Jogo',
               status: 'Suspenso',
-              multaValor: 0
-            });
-            salvouSusp = true;
-            toast.error(`ATENÇÃO: ${ev.jogador} tomou o 3º AMARELO e foi suspenso automaticamente!`, { duration: 6000 });
+              multa_valor: 0
+            }]);
+            toast.error(`ATENÇÃO: ${ev.jogador} tomou o 3º AMARELO e foi suspenso automaticamente!`);
           }
         }
-      });
-
-      if(salvouSusp) {
-        localStorage.setItem('@nicolau:suspensoes', JSON.stringify(suspensoes));
       }
 
       toast.success('Jogo Finalizado e Classificação Computada!');
       setSumulaModalOpen(false);
+      fetchData(); // Recarrega os dados com as mudanças
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao encerrar a súmula.');
     }
   };
 
-  const aplicarWO = (jogo: any, timeVencedor: string) => {
-    if(confirm(`Aplicar W.O com vitória para ${timeVencedor}? O outro time será punido no financeiro.`)) {
-      const updatedMatch = {
-        ...jogo,
-        golsA: timeVencedor === jogo.equipeA ? 3 : 0,
-        golsB: timeVencedor === jogo.equipeB ? 3 : 0,
-        eventos: [],
+  const aplicarWO = async (jogo: any, timeVencedorNome: string) => {
+    if(!confirm(`Aplicar W.O com vitória para ${timeVencedorNome}? O outro time será punido no financeiro.`)) return;
+
+    try {
+      const golsA = timeVencedorNome === jogo.equipe_a_nome ? 3 : 0;
+      const golsB = timeVencedorNome === jogo.equipe_b_nome ? 3 : 0;
+      const timePerdedor = timeVencedorNome === jogo.equipe_a_nome ? jogo.equipe_b_nome : jogo.equipe_a_nome;
+
+      // 1. Update Game
+      const { error: wErr } = await supabase.from('jogos').update({
+        gols_a: golsA,
+        gols_b: golsB,
         status: 'W.O'
-      };
-      setJogos(jogos.map(j => j.id === updatedMatch.id ? updatedMatch : j));
-      
-      const timePerdedor = timeVencedor === jogo.equipeA ? jogo.equipeB : jogo.equipeA;
-      // GATILHO W.O
-      const financeiro = JSON.parse(localStorage.getItem('@nicolau:financeiro') || '[]');
-      financeiro.push({
-        id: Date.now(),
-        tipo: 'RECEITA',
-        descricao: `Multa por W.O - Equipe: ${timePerdedor} (${jogo.campeonato})`,
+      }).eq('id', jogo.id);
+
+      if (wErr) throw wErr;
+
+      // 2. Multa Financeiro
+      await supabase.from('financeiro').insert([{
+        descricao: `Multa por W.O - Equipe: ${timePerdedor} (${jogo.campeonato_nome})`,
+        equipe: timePerdedor,
+        vencimento: new Date(jogo.data).toLocaleDateString('pt-BR'),
         valor: 200,
-        data: jogo.data,
-        status: 'Pendente'
-      });
-      localStorage.setItem('@nicolau:financeiro', JSON.stringify(financeiro));
+        status: 'Pendente',
+        tipo: 'receita'
+      }]);
+
       toast.success(`W.O aplicado. Multa de R$200 enviada ao financeiro da equipe ${timePerdedor}.`);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao aplicar W.O.');
     }
   };
 
   const jogosFiltrados = filtroCamp 
-    ? jogos.filter(j => j.campeonato === filtroCamp)
+    ? jogos.filter(j => j.campeonato_nome === filtroCamp)
     : jogos;
 
   // Elencos disponiveis current equipe na sumula
-  const elencoNovoEvento = atletas.filter(a => a.equipe === novoEvento.equipe);
+  const elencoNovoEvento = atletas.filter(a => a.equipe_nome === novoEvento.equipe);
 
   return (
     <div className="space-y-6">
@@ -235,64 +317,70 @@ export default function Jogos() {
         </select>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {jogosFiltrados.length === 0 ? (
-          <div className="col-span-1 lg:col-span-2 text-center p-12 bg-white rounded-xl border border-slate-200">
-            <Trophy className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-medium">Nenhuma partida registrada neste filtro.</p>
-          </div>
-        ) : (
-          jogosFiltrados.map(jogo => (
-            <div key={jogo.id} className="bg-white border flex flex-col justify-between border-slate-200 rounded-xl overflow-hidden shadow-sm hover:border-emerald-200 transition-colors">
-              <div className="bg-slate-50 border-b border-slate-100 p-3 flex justify-between items-center text-sm font-medium text-slate-600">
-                <span className="flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-500"/> {jogo.rodada} • {jogo.campeonato}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs ${
-                  jogo.status === 'Agendado' ? 'bg-amber-100 text-amber-800' :
-                  jogo.status === 'Encerrado' ? 'bg-emerald-100 text-emerald-800' :
-                  'bg-rose-100 text-rose-800'
-                }`}>
-                  {jogo.status}
-                </span>
-              </div>
-              <div className="p-5">
-                <div className="flex justify-between items-center">
-                  <div className="text-center flex-1">
-                    <h3 className="font-bold text-slate-900 text-lg sm:text-xl truncate" title={jogo.equipeA}>{jogo.equipeA}</h3>
-                  </div>
-                  <div className="px-4 text-center">
-                    <div className="text-3xl font-black text-slate-900 tracking-tighter bg-slate-100 px-4 py-2 rounded-lg">
-                      {jogo.golsA} <span className="text-slate-300 mx-1">x</span> {jogo.golsB}
+      {loading ? (
+        <div className="text-center p-12 bg-white rounded-xl border border-slate-200">
+           <p className="text-slate-500 font-medium">Carregando jogos da nuvem...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {jogosFiltrados.length === 0 ? (
+            <div className="col-span-1 lg:col-span-2 text-center p-12 bg-white rounded-xl border border-slate-200">
+              <Trophy className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-medium">Nenhuma partida registrada neste filtro.</p>
+            </div>
+          ) : (
+            jogosFiltrados.map(jogo => (
+              <div key={jogo.id} className="bg-white border flex flex-col justify-between border-slate-200 rounded-xl overflow-hidden shadow-sm hover:border-emerald-200 transition-colors">
+                <div className="bg-slate-50 border-b border-slate-100 p-3 flex justify-between items-center text-sm font-medium text-slate-600">
+                  <span className="flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-500"/> {jogo.rodada} • {jogo.campeonato_nome}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    jogo.status === 'Agendado' ? 'bg-amber-100 text-amber-800' :
+                    jogo.status === 'Encerrado' ? 'bg-emerald-100 text-emerald-800' :
+                    'bg-rose-100 text-rose-800'
+                  }`}>
+                    {jogo.status}
+                  </span>
+                </div>
+                <div className="p-5">
+                  <div className="flex justify-between items-center">
+                    <div className="text-center flex-1">
+                      <h3 className="font-bold text-slate-900 text-lg sm:text-xl truncate" title={jogo.equipe_a_nome}>{jogo.equipe_a_nome}</h3>
+                    </div>
+                    <div className="px-4 text-center">
+                      <div className="text-3xl font-black text-slate-900 tracking-tighter bg-slate-100 px-4 py-2 rounded-lg">
+                        {jogo.gols_a} <span className="text-slate-300 mx-1">x</span> {jogo.gols_b}
+                      </div>
+                    </div>
+                    <div className="text-center flex-1">
+                      <h3 className="font-bold text-slate-900 text-lg sm:text-xl truncate" title={jogo.equipe_b_nome}>{jogo.equipe_b_nome}</h3>
                     </div>
                   </div>
-                  <div className="text-center flex-1">
-                    <h3 className="font-bold text-slate-900 text-lg sm:text-xl truncate" title={jogo.equipeB}>{jogo.equipeB}</h3>
+                  <div className="mt-4 flex justify-center text-xs text-slate-500 bg-slate-50 rounded-md py-2 border border-slate-100">
+                    <span className="flex items-center gap-1 mx-2"><CalendarIcon className="h-3 w-3" /> {new Date(jogo.data).toLocaleDateString('pt-BR')} • {jogo.hora}</span>
+                    <span className="flex items-center gap-1 mx-2"><LocationIcon className="h-3 w-3" /> {jogo.quadra}</span>
                   </div>
                 </div>
-                <div className="mt-4 flex justify-center text-xs text-slate-500 bg-slate-50 rounded-md py-2 border border-slate-100">
-                  <span className="flex items-center gap-1 mx-2"><CalendarIcon className="h-3 w-3" /> {jogo.data} • {jogo.hora}</span>
-                  <span className="flex items-center gap-1 mx-2"><LocationIcon className="h-3 w-3" /> {jogo.quadra}</span>
+                <div className="p-3 bg-slate-50 flex gap-2 border-t border-slate-100">
+                  {jogo.status === 'Agendado' && (
+                    <>
+                      <button onClick={() => abrirSumula(jogo)} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 shadow-sm">
+                        <PlayCircle className="h-4 w-4" /> Preencher Súmula
+                      </button>
+                      <button onClick={() => aplicarWO(jogo, jogo.equipe_a_nome)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipe_a_nome}</button>
+                      <button onClick={() => aplicarWO(jogo, jogo.equipe_b_nome)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipe_b_nome}</button>
+                    </>
+                  )}
+                  {jogo.status !== 'Agendado' && (
+                    <button onClick={() => toast.success("Súmula PDF será gerada via Supabase.")} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
+                      Visualizar Súmula (PDF)
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="p-3 bg-slate-50 flex gap-2 border-t border-slate-100">
-                {jogo.status === 'Agendado' && (
-                  <>
-                    <button onClick={() => abrirSumula(jogo)} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 shadow-sm">
-                      <PlayCircle className="h-4 w-4" /> Preencher Súmula
-                    </button>
-                    <button onClick={() => aplicarWO(jogo, jogo.equipeA)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipeA}</button>
-                    <button onClick={() => aplicarWO(jogo, jogo.equipeB)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipeB}</button>
-                  </>
-                )}
-                {jogo.status !== 'Agendado' && (
-                  <button onClick={() => toast.success("Súmula PDF será gerada via Supabase.")} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
-                    Visualizar Súmula (PDF)
-                  </button>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      )}
 
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Agendar Partida Futsal">
         <form onSubmit={handleSalvarJogo} className="space-y-4">
@@ -302,7 +390,7 @@ export default function Jogos() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Campeonato</label>
-            <select required value={formData.campeonato} onChange={e => setFormData({...formData, campeonato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm">
+            <select required value={formData.campeonato_nome} onChange={e => setFormData({...formData, campeonato_nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm">
               <option value="">Selecione...</option>
               {campeonatos.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
             </select>
@@ -310,14 +398,14 @@ export default function Jogos() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700">Time Mandante</label>
-              <select required value={formData.equipeA} onChange={e => setFormData({...formData, equipeA: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm">
+              <select required value={formData.equipe_a_nome} onChange={e => setFormData({...formData, equipe_a_nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm">
                 <option value="">Selecione...</option>
                 {equipesFiltradasCamp.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">Time Visitante</label>
-              <select required value={formData.equipeB} onChange={e => setFormData({...formData, equipeB: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm">
+              <select required value={formData.equipe_b_nome} onChange={e => setFormData({...formData, equipe_b_nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm">
                 <option value="">Selecione...</option>
                 {equipesFiltradasCamp.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
               </select>
@@ -351,31 +439,31 @@ export default function Jogos() {
       </Modal>
 
       {/* SÚMULA MODAL */}
-      <Modal isOpen={isSumulaModalOpen} onClose={() => setSumulaModalOpen(false)} title={`Súmula: ${jogoSumula?.equipeA} x ${jogoSumula?.equipeB}`}>
+      <Modal isOpen={isSumulaModalOpen} onClose={() => setSumulaModalOpen(false)} title={`Súmula: ${jogoSumula?.equipe_a_nome} x ${jogoSumula?.equipe_b_nome}`}>
         <div className="space-y-6">
           <div className="bg-slate-900 rounded-xl p-6 relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-rose-500"></div>
             <div className="flex justify-between items-center text-white">
               <div className="text-center w-1/3">
-                <span className="block text-sm text-slate-400 mb-1 lg:text-lg uppercase select-none">{jogoSumula?.equipeA}</span>
+                <span className="block text-sm text-slate-400 mb-1 lg:text-lg uppercase select-none">{jogoSumula?.equipe_a_nome}</span>
                 <span className="text-5xl font-black">{sumulaPlacarA}</span>
               </div>
               <div className="text-center w-1/3 text-slate-500 text-2xl font-black font-mono">X</div>
               <div className="text-center w-1/3">
-                <span className="block text-sm text-slate-400 mb-1 lg:text-lg uppercase select-none">{jogoSumula?.equipeB}</span>
+                <span className="block text-sm text-slate-400 mb-1 lg:text-lg uppercase select-none">{jogoSumula?.equipe_b_nome}</span>
                 <span className="text-5xl font-black">{sumulaPlacarB}</span>
               </div>
             </div>
           </div>
 
           <div className="bg-white border text-sm border-slate-200 rounded-xl p-4 shadow-sm">
-            <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-emerald-600"/> Lançar Evento Lance a Lance</h4>
+            <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-emerald-600"/> Lançar Evento Lance-a-Lance</h4>
             <div className="flex flex-col sm:flex-row gap-2 items-end">
               <div className="w-full sm:w-1/4">
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Equipe</label>
                 <select value={novoEvento.equipe} onChange={e => setNovoEvento({...novoEvento, equipe: e.target.value, jogador: ''})} className="block w-full rounded-md border-slate-300 py-1.5 px-2 border shadow-sm">
-                  <option value={jogoSumula?.equipeA}>{jogoSumula?.equipeA}</option>
-                  <option value={jogoSumula?.equipeB}>{jogoSumula?.equipeB}</option>
+                  <option value={jogoSumula?.equipe_a_nome}>{jogoSumula?.equipe_a_nome}</option>
+                  <option value={jogoSumula?.equipe_b_nome}>{jogoSumula?.equipe_b_nome}</option>
                 </select>
               </div>
               <div className="w-full sm:w-1/3">
@@ -403,7 +491,7 @@ export default function Jogos() {
 
           <div className="max-h-52 overflow-y-auto">
             <h4 className="font-bold text-slate-800 text-sm mb-2 border-b pb-1">Cronologia da Partida</h4>
-            {eventosSumula.length === 0 ? <p className="text-xs text-slate-400 italic">Nenhum evento registrado.</p> : (
+            {eventosSumula.length === 0 ? <p className="text-xs text-slate-400 italic">Nenhum evento registrado no Supabase.</p> : (
               <ul className="space-y-2">
                 {eventosSumula.map((ev: any) => (
                   <li key={ev.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-md border border-slate-100 text-sm">
