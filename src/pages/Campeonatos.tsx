@@ -29,15 +29,24 @@ export default function Campeonatos() {
     edicao: new Date().getFullYear().toString(),
     periodo: '',
     taxaInscricao: 500,
-    status: 'Ativo'
+    status: 'Ativo',
+    equipesSelecionadas: [] as string[]
   });
 
   const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos'>('geral');
   const [expandedEquipes, setExpandedEquipes] = useState<string[]>([]);
+  const [equipesDisponiveis, setEquipesDisponiveis] = useState<any[]>([]);
 
   useEffect(() => {
     fetchCampeonatos();
+    fetchEquipesDisponiveis();
   }, []);
+
+  const fetchEquipesDisponiveis = async () => {
+    const { data } = await supabase.from('equipes').select('*').order('nome');
+    if (data) setEquipesDisponiveis(data);
+  };
+
 
   const fetchCampeonatos = async () => {
     try {
@@ -72,19 +81,27 @@ export default function Campeonatos() {
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('campeonatos').insert([{
+      const { data: novoCamp, error } = await supabase.from('campeonatos').insert([{
         nome: formData.nome,
         categoria: formData.categoria,
         edicao: formData.edicao,
         periodo: formData.periodo,
         taxa_inscricao: formData.taxaInscricao,
         status: formData.status
-      }]);
+      }]).select().single();
       if (error) throw error;
+
+      if (novoCamp && formData.equipesSelecionadas.length > 0) {
+        await supabase.from('equipes')
+          .update({ campeonato_id: novoCamp.id, campeonato_nome: novoCamp.nome })
+          .in('id', formData.equipesSelecionadas);
+      }
+
       toast.success('Campeonato criado com sucesso!');
       setFormModalOpen(false);
       resetForm();
       fetchCampeonatos();
+      fetchEquipesDisponiveis();
     } catch (error) {
       console.error('Erro ao salvar campeonato', error);
       toast.error('Erro ao salvar campeonato.');
@@ -102,12 +119,25 @@ export default function Campeonatos() {
         taxa_inscricao: formData.taxaInscricao,
         status: formData.status
       }).eq('id', campeonatoSelecionado.id);
-      
       if (error) throw error;
+
+      // Resetar campeonato_id das equipes que pertecião a este campeonato 
+      // e depois setar as equipes que estão selecionadas atualmente
+      await supabase.from('equipes')
+        .update({ campeonato_id: null, campeonato_nome: null })
+        .eq('campeonato_id', campeonatoSelecionado.id);
+        
+      if (formData.equipesSelecionadas.length > 0) {
+        await supabase.from('equipes')
+          .update({ campeonato_id: campeonatoSelecionado.id, campeonato_nome: formData.nome })
+          .in('id', formData.equipesSelecionadas);
+      }
+
       toast.success('Campeonato atualizado com sucesso!');
       setEditModalOpen(false);
       resetForm();
       fetchCampeonatos();
+      fetchEquipesDisponiveis();
     } catch (error) {
       console.error('Erro ao atualizar campeonato', error);
       toast.error('Erro ao editar campeonato.');
@@ -137,12 +167,13 @@ export default function Campeonatos() {
       edicao: new Date().getFullYear().toString(),
       periodo: '',
       taxaInscricao: 500,
-      status: 'Ativo'
+      status: 'Ativo',
+      equipesSelecionadas: []
     });
     setCampeonatoSelecionado(null);
   };
 
-  const abrirEditar = (campeonato: any) => {
+  const abrirEditar = async (campeonato: any) => {
     setCampeonatoSelecionado(campeonato);
     setFormData({
       nome: campeonato.nome,
@@ -150,9 +181,16 @@ export default function Campeonatos() {
       edicao: campeonato.edicao,
       periodo: campeonato.periodo,
       taxaInscricao: campeonato.taxa_inscricao || 500,
-      status: campeonato.status
+      status: campeonato.status,
+      equipesSelecionadas: []
     });
     setEditModalOpen(true);
+    
+    // Fetch equipes do campeonato para pre-selecionar
+    const { data: eqs } = await supabase.from('equipes').select('id').eq('campeonato_id', campeonato.id);
+    if (eqs) {
+      setFormData(prev => ({ ...prev, equipesSelecionadas: eqs.map(e => e.id) }));
+    }
   };
 
   const abrirDetalhes = async (campeonato: any) => {
@@ -304,6 +342,28 @@ export default function Campeonatos() {
             <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
             <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
+          
+          <div className="border border-slate-200 rounded-md p-3 max-h-48 overflow-y-auto">
+            <span className="block text-sm font-medium text-slate-700 mb-2">Vincular Equipes do Banco (Opcional):</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {equipesDisponiveis.map(eq => (
+                <label key={eq.id} className="flex items-center space-x-2 text-sm bg-slate-50 p-2 rounded border border-slate-100 cursor-pointer hover:bg-blue-50">
+                  <input 
+                    type="checkbox" 
+                    className="rounded text-blue-600 border-slate-300 focus:ring-blue-600"
+                    checked={formData.equipesSelecionadas.includes(eq.id)}
+                    onChange={(e) => {
+                      if(e.target.checked) setFormData({...formData, equipesSelecionadas: [...formData.equipesSelecionadas, eq.id]});
+                      else setFormData({...formData, equipesSelecionadas: formData.equipesSelecionadas.filter(id => id !== eq.id)});
+                    }}
+                  />
+                  <span className="truncate" title={eq.nome}>{eq.nome}</span>
+                </label>
+              ))}
+              {equipesDisponiveis.length === 0 && <span className="text-xs text-slate-400">Nenhuma equipe cadastrada</span>}
+            </div>
+          </div>
+
           <div className="pt-4 flex justify-end space-x-3 border-t border-slate-100 mt-6">
             <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm border hover:bg-slate-50">Cancelar</button>
             <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Salvar Campeonato</button>
@@ -323,6 +383,28 @@ export default function Campeonatos() {
             <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
             <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
+
+          <div className="border border-slate-200 rounded-md p-3 max-h-48 overflow-y-auto">
+            <span className="block text-sm font-medium text-slate-700 mb-2">Vincular Equipes do Banco (Opcional):</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {equipesDisponiveis.map(eq => (
+                <label key={eq.id} className="flex items-center space-x-2 text-sm bg-slate-50 p-2 rounded border border-slate-100 cursor-pointer hover:bg-blue-50">
+                  <input 
+                    type="checkbox" 
+                    className="rounded text-blue-600 border-slate-300 focus:ring-blue-600"
+                    checked={formData.equipesSelecionadas.includes(eq.id)}
+                    onChange={(e) => {
+                      if(e.target.checked) setFormData({...formData, equipesSelecionadas: [...formData.equipesSelecionadas, eq.id]});
+                      else setFormData({...formData, equipesSelecionadas: formData.equipesSelecionadas.filter(id => id !== eq.id)});
+                    }}
+                  />
+                  <span className="truncate" title={eq.nome}>{eq.nome}</span>
+                </label>
+              ))}
+              {equipesDisponiveis.length === 0 && <span className="text-xs text-slate-400">Nenhuma equipe cadastrada</span>}
+            </div>
+          </div>
+
           <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-6">
             <button type="button" onClick={excluirCampeonato} className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100">Excluir</button>
             <div className="flex space-x-3">
