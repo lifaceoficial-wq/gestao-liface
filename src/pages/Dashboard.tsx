@@ -8,7 +8,7 @@ export default function Dashboard() {
   const [equipesCount, setEquipesCount] = useState(0);
   const [suspensoesCount, setSuspensoesCount] = useState(0);
   const [pendenciasTotal, setPendenciasTotal] = useState(0);
-  const [eventosRecentes, setEventosRecentes] = useState<any[]>([]);
+  const [jogosFuturos, setJogosFuturos] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,11 +48,15 @@ export default function Dashboard() {
       const totalPendente = (finData || []).reduce((acc, curr) => acc + Number(curr.valor), 0);
       setPendenciasTotal(totalPendente);
 
-      // Eventos (Futuro: substituir por uma tabela de eventos/acoes_sociais quando for criada.
-      // Por enquanto vamos tentar buscar do localstorage pra nao quebrar nada caso vc ja tenha criado,
-      // ou apenas omitir). Como migramos tudo, se for criar depois no supabase, criaremos tabela.
-      const eventos = JSON.parse(localStorage.getItem('@nicolau:eventos') || '[]');
-      setEventosRecentes(eventos.slice(0, 3));
+      // Próximos Jogos
+      const { data: proxJogos } = await supabase
+        .from('jogos')
+        .select('*')
+        .eq('status', 'Agendado')
+        .order('data', { ascending: true })
+        .order('hora', { ascending: true })
+        .limit(4);
+      setJogosFuturos(proxJogos || []);
 
       // 5. Chart Data
       // Para o chart de cartões / suspensoes: pegamos os cartões (eventos_jogo)
@@ -175,27 +179,26 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Próximos Jogos */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium text-slate-900 mb-4">Ações Sociais e Eventos</h2>
+          <h2 className="text-lg font-medium text-slate-900 mb-4 flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-emerald-600" /> Próximos Jogos
+          </h2>
           <div className="space-y-4">
-            {eventosRecentes.length === 0 ? (
-              <p className="text-slate-500 text-sm italic">Nenhum evento futuro cadastrado.</p>
+            {jogosFuturos.length === 0 ? (
+              <p className="text-slate-500 text-sm italic">Nenhum jogo agendado no momento.</p>
             ) : (
-              eventosRecentes.map((item: any, i: number) => (
-                <div key={i} className="flex items-center justify-between border-b border-slate-100 pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <p className="font-medium text-slate-900">{item.nome}</p>
-                    <p className="text-sm text-slate-500">{item.tipo || 'Evento'} • {item.data}</p>
+              jogosFuturos.map((jogo: any) => (
+                <div key={jogo.id} className="flex flex-col border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{jogo.campeonato_nome}</span>
+                    <span className="text-xs text-slate-500 flex items-center gap-1">{new Date(jogo.data).toLocaleDateString('pt-BR')} • {jogo.hora}</span>
                   </div>
-                  <span className={cn(
-                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                    item.status === 'Concluído' ? "bg-emerald-100 text-emerald-800" :
-                    item.status === 'Em andamento' ? "bg-blue-100 text-blue-800" :
-                    "bg-slate-100 text-slate-800"
-                  )}>
-                    {item.status || 'Planejado'}
-                  </span>
+                  <div className="flex justify-between items-center mt-1 bg-slate-50 p-2 rounded border border-slate-100">
+                    <span className="font-bold text-slate-800 text-sm truncate w-2/5 text-right">{jogo.equipe_a_nome}</span>
+                    <span className="text-xs font-black text-slate-400 w-1/5 text-center px-1">X</span>
+                    <span className="font-bold text-slate-800 text-sm truncate w-2/5 text-left">{jogo.equipe_b_nome}</span>
+                  </div>
                 </div>
               ))
             )}
