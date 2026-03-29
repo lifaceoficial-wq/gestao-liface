@@ -186,7 +186,7 @@ export default function Diretoria() {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm min-h-[60vh]">
         {isLoading ? (
           <div className="text-center p-12">
             <p className="text-slate-500">Carregando membros da diretoria...</p>

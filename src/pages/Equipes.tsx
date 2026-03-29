@@ -263,7 +263,7 @@ export default function Equipes() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm min-h-[60vh]">
         {isLoading ? (
           <div className="p-8 text-center text-slate-500">Caregando equipes do banco de dados...</div>
         ) : (

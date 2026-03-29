@@ -207,7 +207,7 @@ export default function Atletas() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm min-h-[60vh]">
         {isLoading ? (
           <div className="p-8 text-center text-slate-500">Caregando atletas do banco de dados...</div>
         ) : (

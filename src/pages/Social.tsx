@@ -223,7 +223,7 @@ export default function Social() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[60vh]">
         {filteredItems.length === 0 ? (
           <div className="text-center p-12">
             <p className="text-slate-500">Nenhum projeto social encontrado.</p>

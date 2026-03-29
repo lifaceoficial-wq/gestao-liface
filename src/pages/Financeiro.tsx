@@ -186,7 +186,7 @@ export default function Financeiro() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[60vh]">
         {loading ? (
             <div className="text-center p-12"><p className="text-slate-500">Carregando dados financeiros...</p></div>
         ) : filteredItems.length === 0 ? (
