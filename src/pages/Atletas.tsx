@@ -69,6 +69,17 @@ export default function Atletas() {
 
   useEffect(() => {
     fetchData();
+
+    const channel = supabase
+      .channel('atletas_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atletas' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchData = async () => {

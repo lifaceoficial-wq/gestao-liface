@@ -60,6 +60,17 @@ export default function Equipes() {
 
   useEffect(() => {
     fetchData();
+
+    const channel = supabase
+      .channel('equipes_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipes' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchData = async () => {

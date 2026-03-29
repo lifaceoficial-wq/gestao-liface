@@ -40,6 +40,17 @@ export default function Campeonatos() {
   useEffect(() => {
     fetchCampeonatos();
     fetchEquipesDisponiveis();
+
+    const channel = supabase
+      .channel('campeonatos_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'campeonatos' }, () => {
+        fetchCampeonatos();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchEquipesDisponiveis = async () => {
