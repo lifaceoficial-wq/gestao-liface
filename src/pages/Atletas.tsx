@@ -1,27 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search } from 'lucide-react';
-import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 export default function Atletas() {
-  const [atletas, setAtletas] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:atletas');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
-
+  const [atletas, setAtletas] = useState<any[]>([]);
   const [equipesCadastradas, setEquipesCadastradas] = useState<any[]>([]);
-
-  useEffect(() => {
-    const eqs = localStorage.getItem('@nicolau:equipes');
-    if (eqs) setEquipesCadastradas(JSON.parse(eqs));
-  }, []);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
-  
+  const [isLoading, setIsLoading] = useState(true);
+
   const [isFormModalOpen, setFormModalOpen] = useState(false);
   const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [atletaSelecionado, setAtletaSelecionado] = useState<any>(null);
@@ -31,84 +21,170 @@ export default function Atletas() {
     apelido: '',
     documento: '',
     posicao: '',
-    equipe: '',
-    campeonatoHeranca: '',
+    equipe_id: '',
+    equipe_nome: '',
+    campeonato_heranca: '',
     historico: 'Limpo',
     status: 'Regular',
     taxaCarteira: 15
   });
 
-  // Garante sincronia sempre que montar a tela
   useEffect(() => {
-    const stored = localStorage.getItem('@nicolau:atletas');
-    if (stored) {
-      setAtletas(JSON.parse(stored));
-    }
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('@nicolau:atletas', JSON.stringify(atletas));
-  }, [atletas]);
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch equipes
+      const { data: eqs, error: eqError } = await supabase.from('equipes').select('*').order('nome');
+      if (eqError) throw eqError;
+      setEquipesCadastradas(eqs || []);
+
+      // Fetch atletas
+      const { data: ats, error: atError } = await supabase.from('atletas').select('*').order('nome');
+      if (atError) throw atError;
+      
+      // Mapear propriedades para compatibilidade com o layout
+      const formattedAts = (ats || []).map(a => ({
+        ...a,
+        equipe: a.equipe_nome,
+        taxaCarteira: a.taxa_carteira
+      }));
+      setAtletas(formattedAts);
+    } catch (error: any) {
+      toast.error('Erro ao buscar dados: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredItems = atletas.filter((a: any) => 
     a.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    a.equipe.toLowerCase().includes(searchTerm.toLowerCase())
+    a.equipe?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Gatilho Financeiro
-  const criarCobrancaCarteirinha = (atletaNome: string, equipeNome: string, valor: number) => {
-    const cobranca = {
-      id: Date.now() + Math.random(),
-      descricao: `Carteira Atleta: ${atletaNome} (${equipeNome})`,
-      vencimento: new Date().toLocaleDateString('pt-BR'),
-      valor: valor,
-      status: 'Pago', // Carteirinha geralmente paga na hora
-      tipo: 'receita'
-    };
-    const fin = JSON.parse(localStorage.getItem('@nicolau:financeiro') || '[]');
-    localStorage.setItem('@nicolau:financeiro', JSON.stringify([cobranca, ...fin]));
+  const criarCobrancaCarteirinha = async (atletaNome: string, equipeNome: string, valor: number) => {
+    try {
+      await supabase.from('financeiro').insert([{
+        descricao: `Carteira Atleta: ${atletaNome} (${equipeNome})`,
+        equipe: equipeNome,
+        vencimento: new Date().toLocaleDateString('pt-BR'),
+        valor: valor,
+        status: 'Pago',
+        tipo: 'receita'
+      }]);
+    } catch (error) {
+      console.error('Erro ao gerar cobrança automática:', error);
+    }
   };
 
-  const handleEquipeChange = (nomeEquipeSelecionada: string) => {
-    const infoEquipe = equipesCadastradas.find(e => e.nome === nomeEquipeSelecionada);
+  const handleEquipeChange = (equipeIdStr: string) => {
+    const infoEquipe = equipesCadastradas.find(e => e.id === equipeIdStr);
+    if (!infoEquipe) return;
     setFormData({ 
       ...formData, 
-      equipe: nomeEquipeSelecionada, 
-      campeonatoHeranca: infoEquipe ? infoEquipe.campeonato : '' 
+      equipe_id: infoEquipe.id,
+      equipe_nome: infoEquipe.nome,
+      campeonato_heranca: infoEquipe.campeonato_nome || '' 
     });
   };
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(formData.equipe === '') { toast.error('Selecione uma equipe!'); return; }
+    if(!formData.equipe_id) { toast.error('Selecione uma equipe!'); return; }
 
-    const novo = { id: Date.now(), ...formData };
-    setAtletas([novo, ...atletas]);
+    const loadingToast = toast.loading('Salvando atleta...');
+    try {
+      const payload = {
+        nome: formData.nome,
+        apelido: formData.apelido,
+        documento: formData.documento,
+        posicao: formData.posicao,
+        equipe_id: formData.equipe_id,
+        equipe_nome: formData.equipe_nome,
+        campeonato_heranca: formData.campeonato_heranca,
+        historico: formData.historico,
+        status: formData.status,
+        taxa_carteira: formData.taxaCarteira
+      };
 
-    criarCobrancaCarteirinha(formData.nome, formData.equipe, formData.taxaCarteira);
-    toast.success('Atleta salvo! A carteirinha de R$15.00 foi registrada como Paga no Financeiro.', { duration: 5000 });
+      const { data, error } = await supabase.from('atletas').insert([payload]).select();
+      if (error) throw error;
+      
+      if (data && data[0]) {
+        const newAtleta = {
+           ...data[0],
+           equipe: data[0].equipe_nome,
+           taxaCarteira: data[0].taxa_carteira
+        };
+        setAtletas([newAtleta, ...atletas]);
+      }
 
-    setFormModalOpen(false);
-    resetForm();
+      await criarCobrancaCarteirinha(formData.nome, formData.equipe_nome, formData.taxaCarteira);
+      
+      toast.success('Atleta salvo no Supabase! A carteirinha foi registrada como Paga no Financeiro.', { id: loadingToast });
+      setFormModalOpen(false);
+      resetForm();
+    } catch (error: any) {
+      toast.error('Erro ao salvar: ' + error.message, { id: loadingToast });
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAtletas(atletas.map((a: any) => a.id === atletaSelecionado.id ? { ...a, ...formData } : a));
-    setEditModalOpen(false);
-    resetForm();
+    const loadingToast = toast.loading('Atualizando atleta...');
+    try {
+      const payload = {
+        nome: formData.nome,
+        documento: formData.documento,
+        posicao: formData.posicao,
+        status: formData.status
+      };
+
+      const { error } = await supabase.from('atletas').update(payload).eq('id', atletaSelecionado.id);
+      if (error) throw error;
+
+      setAtletas(atletas.map((a: any) => a.id === atletaSelecionado.id ? { ...a, ...payload } : a));
+      toast.success('Atleta atualizado!', { id: loadingToast });
+
+      setEditModalOpen(false);
+      resetForm();
+    } catch (error: any) {
+      toast.error('Erro ao atualizar: ' + error.message, { id: loadingToast });
+    }
+  };
+
+  const excluirAtleta = async () => {
+    const loadingToast = toast.loading('Excluindo atleta...');
+    try {
+      const { error } = await supabase.from('atletas').delete().eq('id', atletaSelecionado.id);
+      if (error) throw error;
+      
+      setAtletas(atletas.filter((a: any) => a.id !== atletaSelecionado.id));
+      toast.success('Atleta excluído do Supabase!', { id: loadingToast });
+      setEditModalOpen(false);
+      resetForm();
+    } catch (error: any) {
+      toast.error('Erro: ' + error.message, { id: loadingToast });
+    }
   };
 
   const resetForm = () => {
-    setFormData({ nome: '', apelido: '', documento: '', posicao: '', equipe: '', campeonatoHeranca: '', historico: 'Limpo', status: 'Regular', taxaCarteira: 15 });
+    setFormData({ nome: '', apelido: '', documento: '', posicao: '', equipe_id: '', equipe_nome: '', campeonato_heranca: '', historico: 'Limpo', status: 'Regular', taxaCarteira: 15 });
     setAtletaSelecionado(null);
   };
 
   const abrirEditar = (atleta: any) => {
     setAtletaSelecionado(atleta);
-    setFormData({ ...atleta, taxaCarteira: 15 });
+    setFormData({ 
+      ...atleta, 
+      equipe_id: atleta.equipe_id || '',
+      equipe_nome: atleta.equipe_nome || atleta.equipe || '',
+      taxaCarteira: atleta.taxa_carteira || 15 
+    });
     setEditModalOpen(true);
   };
 
@@ -117,7 +193,7 @@ export default function Atletas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Inscrição de Atletas</h1>
-          <p className="text-sm text-slate-500 mt-1">Vincule atletas a equipes. O campeonato será puxado automaticamente da equipe correspondente.</p>
+          <p className="text-sm text-slate-500 mt-1">Vincule atletas a equipes. Dados agora salvos na nuvem (Supabase).</p>
         </div>
         <button onClick={() => { resetForm(); setFormModalOpen(true); }} className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
           <Plus className="-ml-1 mr-2 w-5 h-5" /> Novo Atleta
@@ -132,44 +208,52 @@ export default function Atletas() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900">Atleta</th>
-              <th className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Conexão Automática (Equipe / Copas)</th>
-              <th className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Status Disciplinar</th>
-              <th className="relative py-3.5 pr-4 text-right">Ação</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {currentItems.map((atleta: any) => (
-              <tr key={atleta.id} className="hover:bg-slate-50">
-                <td className="whitespace-nowrap py-4 pl-4 pr-3 flex items-center gap-3">
-                  <img className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200" src={`https://avatar.iran.liara.run/public/boy?username=${atleta.nome.replace(' ', '')}`} referrerPolicy="no-referrer" />
-                  <div>
-                    <div className="font-medium text-slate-900">{atleta.nome} {atleta.documento ? `(Doc: ${atleta.documento})` : ''}</div>
-                    <div className="text-slate-500 text-xs">{atleta.apelido || atleta.posicao || 'Sem apelido/posição'}</div>
-                  </div>
-                </td>
-                <td className="whitespace-nowrap px-3 py-4">
-                  <div className="text-sm font-bold text-slate-800">{atleta.equipe}</div>
-                  <div className="text-xs text-blue-600">{atleta.campeonatoHeranca || 'Sem campeonato vinculado'}</div>
-                </td>
-                <td className="whitespace-nowrap px-3 py-4">
-                  <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold ring-1 ring-inset ${
-                      atleta.status === 'Regular' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 
-                      atleta.status === 'Suspenso' ? 'bg-rose-50 text-rose-700 ring-rose-600/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20'
-                    }`}>
-                      {atleta.status}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap py-4 pr-4 text-right">
-                  <button onClick={() => abrirEditar(atleta)} className="text-blue-600 bg-white px-3 py-1 rounded border border-slate-200">Editar</button>
-                </td>
+        {isLoading ? (
+          <div className="p-8 text-center text-slate-500">Caregando atletas do banco de dados...</div>
+        ) : (
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900">Atleta</th>
+                <th className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Equipe / Campeonato</th>
+                <th className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Status Disciplinar</th>
+                <th className="relative py-3.5 pr-4 text-right">Ação</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {currentItems.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-sm text-slate-500">Nenhum atleta encontrado.</td>
+                </tr>
+              ) : currentItems.map((atleta: any) => (
+                <tr key={atleta.id} className="hover:bg-slate-50">
+                  <td className="whitespace-nowrap py-4 pl-4 pr-3 flex items-center gap-3">
+                    <img className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200" src={`https://avatar.iran.liara.run/public/boy?username=${atleta.nome.replace(' ', '')}`} referrerPolicy="no-referrer" />
+                    <div>
+                      <div className="font-medium text-slate-900">{atleta.nome} {atleta.documento ? `(Doc: ${atleta.documento})` : ''}</div>
+                      <div className="text-slate-500 text-xs">{atleta.apelido || atleta.posicao || 'Sem apelido/posição'}</div>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-4">
+                    <div className="text-sm font-bold text-slate-800">{atleta.equipe}</div>
+                    <div className="text-xs text-blue-600">{atleta.campeonato_heranca || 'Sem campeonato vinculado'}</div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-4">
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold ring-1 ring-inset ${
+                        atleta.status === 'Regular' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 
+                        atleta.status === 'Suspenso' ? 'bg-rose-50 text-rose-700 ring-rose-600/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20'
+                      }`}>
+                        {atleta.status}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap py-4 pr-4 text-right">
+                    <button onClick={() => abrirEditar(atleta)} className="text-blue-600 bg-white px-3 py-1 rounded border border-slate-200">Editar</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Cadastrar Atleta Oficial">
@@ -199,23 +283,23 @@ export default function Atletas() {
             <h3 className="text-sm font-bold text-slate-800">Vínculos Relacionais</h3>
             <div>
               <label className="block text-xs font-medium text-slate-500 uppercase">1. Selecione a Equipe Existente</label>
-              <select required value={formData.equipe} onChange={e => handleEquipeChange(e.target.value)} className="mt-1 block w-full rounded border-slate-300 px-3 py-2 sm:text-sm">
+              <select required value={formData.equipe_id} onChange={e => handleEquipeChange(e.target.value)} className="mt-1 block w-full rounded border-slate-300 px-3 py-2 sm:text-sm">
                 <option value="">-- Escolher Equipe --</option>
                 {equipesCadastradas.map(eq => (
-                  <option key={eq.id} value={eq.nome}>{eq.nome}</option>
+                  <option key={eq.id} value={eq.id}>{eq.nome}</option>
                 ))}
               </select>
             </div>
-            {formData.equipe && (
+            {formData.equipe_id && (
               <div>
                  <label className="block text-xs font-medium text-slate-500 uppercase">2. Campeonato (Herança Automática)</label>
-                 <input disabled type="text" value={formData.campeonatoHeranca || 'Nenhum campeonato nessa equipe'} className="mt-1 block w-full rounded bg-slate-200 border-slate-300 px-3 py-2 sm:text-sm text-slate-600 italic" />
+                 <input disabled type="text" value={formData.campeonato_heranca || 'Nenhum campeonato nessa equipe'} className="mt-1 block w-full rounded bg-slate-200 border-slate-300 px-3 py-2 sm:text-sm text-slate-600 italic" />
               </div>
             )}
           </div>
 
           <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-2">
-            <span className="text-xs font-bold text-emerald-800">Emissão de Carteirinha (Módulo Financeiro)</span>
+            <span className="text-xs font-bold text-emerald-800">Emissão de Carteirinha (Financeiro na Nuvem)</span>
             <div className="mt-1 flex items-center justify-between">
               <span className="text-sm">Taxa de Cadastro:</span>
               <span className="font-bold">R$ {formData.taxaCarteira},00</span>
@@ -224,13 +308,12 @@ export default function Atletas() {
 
           <div className="flex justify-end pt-4 space-x-3">
              <button type="button" onClick={() => setFormModalOpen(false)} className="px-3 py-2 text-sm border rounded">Cancelar</button>
-             <button type="submit" className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Matricular Atleta</button>
+             <button type="submit" disabled={isLoading} className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">Matricular Atleta</button>
           </div>
         </form>
       </Modal>
 
       <Modal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} title="Editar Cadastro de Atleta">
-         {/* Mesmo form reduzido pra edição */}
          <form onSubmit={handleEditar} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -257,11 +340,11 @@ export default function Atletas() {
             </div>
           </div>
           <div className="flex justify-between pt-4">
-             <button type="button" onClick={() => {
-                setAtletas(atletas.filter((a: any) => a.id !== atletaSelecionado.id));
-                setEditModalOpen(false);
-             }} className="text-rose-600 text-sm">Apagar</button>
-             <button type="submit" className="px-3 py-2 text-sm bg-blue-600 text-white rounded">Atualizar Dados</button>
+             <button type="button" onClick={excluirAtleta} className="text-rose-600 text-sm font-semibold">Apagar Atleta</button>
+             <div className="space-x-3">
+               <button type="button" onClick={() => setEditModalOpen(false)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">Cancelar</button>
+               <button type="submit" className="px-3 py-2 text-sm bg-blue-600 text-white rounded">Atualizar Dados</button>
+             </div>
           </div>
          </form>
       </Modal>
