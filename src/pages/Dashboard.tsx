@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Trophy, Users, AlertTriangle, DollarSign } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
   const [campeonatosCount, setCampeonatosCount] = useState(0);
@@ -9,40 +10,75 @@ export default function Dashboard() {
   const [pendenciasTotal, setPendenciasTotal] = useState(0);
   const [eventosRecentes, setEventosRecentes] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const campeonatos = JSON.parse(localStorage.getItem('@nicolau:campeonatos') || '[]');
-    setCampeonatosCount(campeonatos.filter((c: any) => c.status === 'Ativo').length);
-
-    const equipes = JSON.parse(localStorage.getItem('@nicolau:equipes') || '[]');
-    setEquipesCount(equipes.length);
-
-    const suspensoes = JSON.parse(localStorage.getItem('@nicolau:suspensoes') || '[]');
-    setSuspensoesCount(suspensoes.filter((s: any) => s.status === 'Ativa').length);
-
-    const financeiro = JSON.parse(localStorage.getItem('@nicolau:financeiro') || '[]');
-    const totalPendente = financeiro
-      .filter((f: any) => f.status === 'Pendente')
-      .reduce((acc: number, f: any) => acc + (Number(f.valor) || 0), 0);
-    setPendenciasTotal(totalPendente);
-
-    const eventos = JSON.parse(localStorage.getItem('@nicolau:eventos') || '[]');
-    // Pegar os 3 últimos eventos
-    setEventosRecentes(eventos.slice(0, 3));
-
-    // Chart Data Fake se não houver jogos/suspensoes, senao processar algo real.
-    // Como simplificacao para zerar, vamos iniciar vazio se nao tiver nada
-    const jogos = JSON.parse(localStorage.getItem('@nicolau:jogos') || '[]');
-    if (jogos.length === 0 && suspensoes.length === 0) {
-      setChartData([]);
-    } else {
-      // Cria um chart vazio só para preencher o visual (se precisar no futuro, preenche de verdade por mes)
-      setChartData([
-        { name: 'Atual', cartoes: jogos.length * 2, suspensoes: suspensoes.length, multas: totalPendente }
-      ]);
-    }
-
+    fetchDashboardData();
   }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      // 1. Campeonatos Ativos
+      const { count: campCount } = await supabase
+        .from('campeonatos')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Ativo');
+      setCampeonatosCount(campCount || 0);
+
+      // 2. Equipes
+      const { count: eqCount } = await supabase
+        .from('equipes')
+        .select('*', { count: 'exact', head: true });
+      setEquipesCount(eqCount || 0);
+
+      // 3. Suspensões Ativas
+      const { count: suspCount } = await supabase
+        .from('suspensoes')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Suspenso');
+      setSuspensoesCount(suspCount || 0);
+
+      // 4. Pendências Financeiras
+      const { data: finData } = await supabase
+        .from('financeiro')
+        .select('valor')
+        .eq('status', 'Pendente');
+      
+      const totalPendente = (finData || []).reduce((acc, curr) => acc + Number(curr.valor), 0);
+      setPendenciasTotal(totalPendente);
+
+      // Eventos (Futuro: substituir por uma tabela de eventos/acoes_sociais quando for criada.
+      // Por enquanto vamos tentar buscar do localstorage pra nao quebrar nada caso vc ja tenha criado,
+      // ou apenas omitir). Como migramos tudo, se for criar depois no supabase, criaremos tabela.
+      const eventos = JSON.parse(localStorage.getItem('@nicolau:eventos') || '[]');
+      setEventosRecentes(eventos.slice(0, 3));
+
+      // 5. Chart Data
+      // Para o chart de cartões / suspensoes: pegamos os cartões (eventos_jogo)
+      const { count: cartoesCount } = await supabase
+        .from('eventos_jogo')
+        .select('*', { count: 'exact', head: true })
+        .in('tipo', ['Amarelo', 'Vermelho']);
+      
+      if (!cartoesCount && !suspCount && totalPendente === 0) {
+        setChartData([]);
+      } else {
+        setChartData([
+          { 
+            name: 'Métricas Globais', 
+            cartoes: cartoesCount || 0, 
+            suspensoes: suspCount || 0, 
+            multas: totalPendente 
+          }
+        ]);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados do dashboard:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -59,7 +95,9 @@ export default function Dashboard() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-slate-500">Campeonatos Ativos</p>
-              <p className="text-2xl font-semibold text-slate-900">{campeonatosCount}</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {loading ? '...' : campeonatosCount}
+              </p>
             </div>
           </div>
         </div>
@@ -71,7 +109,9 @@ export default function Dashboard() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-slate-500">Equipes Cadastradas</p>
-              <p className="text-2xl font-semibold text-slate-900">{equipesCount}</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {loading ? '...' : equipesCount}
+              </p>
             </div>
           </div>
         </div>
@@ -83,7 +123,9 @@ export default function Dashboard() {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-slate-500">Atletas Suspensos</p>
-              <p className="text-2xl font-semibold text-slate-900">{suspensoesCount}</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {loading ? '...' : suspensoesCount}
+              </p>
             </div>
           </div>
         </div>
@@ -96,7 +138,7 @@ export default function Dashboard() {
             <div className="ml-4">
               <p className="text-sm font-medium text-slate-500">Pendências Financeiras</p>
               <p className="text-2xl font-semibold text-slate-900">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendenciasTotal)}
+                {loading ? '...' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pendenciasTotal)}
               </p>
             </div>
           </div>
@@ -108,7 +150,11 @@ export default function Dashboard() {
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-medium text-slate-900 mb-4">Estatísticas Disciplinares</h2>
           <div className="h-72">
-            {chartData.length === 0 ? (
+            {loading ? (
+              <div className="w-full h-full flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100">
+                <p className="text-slate-400 text-sm">Carregando dados da nuvem...</p>
+              </div>
+            ) : chartData.length === 0 ? (
               <div className="w-full h-full flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100">
                 <p className="text-slate-400 text-sm">Sem dados disciplinares para exibir.</p>
               </div>
