@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Trophy, Users, AlertTriangle, DollarSign } from 'lucide-react';
+import { Trophy, Users, AlertTriangle, DollarSign, MapPin, Calendar, Clock, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
@@ -48,11 +49,13 @@ export default function Dashboard() {
       const totalPendente = (finData || []).reduce((acc, curr) => acc + Number(curr.valor), 0);
       setPendenciasTotal(totalPendente);
 
-      // Próximos Jogos
+      // Próximos Jogos (apenas futuros)
+      const hoje = new Date().toISOString().split('T')[0];
       const { data: proxJogos } = await supabase
         .from('jogos')
         .select('*')
         .eq('status', 'Agendado')
+        .gte('data', hoje)
         .order('data', { ascending: true })
         .order('hora', { ascending: true })
         .limit(4);
@@ -181,26 +184,56 @@ export default function Dashboard() {
 
         {/* Próximos Jogos */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium text-slate-900 mb-4 flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-emerald-600" /> Próximos Jogos
-          </h2>
-          <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-slate-900 flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-emerald-600" /> Próximos Jogos
+            </h2>
+            <Link to="/jogos" className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+              Ver todos <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="space-y-3">
             {jogosFuturos.length === 0 ? (
               <p className="text-slate-500 text-sm italic">Nenhum jogo agendado no momento.</p>
             ) : (
-              jogosFuturos.map((jogo: any) => (
-                <div key={jogo.id} className="flex flex-col border-b border-slate-100 pb-4 last:border-0 last:pb-0">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{jogo.campeonato_nome}</span>
-                    <span className="text-xs text-slate-500 flex items-center gap-1">{new Date(jogo.data).toLocaleDateString('pt-BR')} • {jogo.hora}</span>
+              jogosFuturos.map((jogo: any) => {
+                const timeIndicator = getTimeIndicator(jogo.data);
+                return (
+                  <div key={jogo.id} className="relative overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{jogo.campeonato_nome}</span>
+                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{jogo.rodada}</span>
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${timeIndicator.color}`}>
+                        {timeIndicator.text}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 text-right">
+                        <span className="font-bold text-slate-800 text-sm truncate block max-w-[120px] ml-auto">{jogo.equipe_a_nome}</span>
+                      </div>
+                      <div className="mx-3 flex items-center gap-2">
+                        <Clock className="h-3 w-3 text-slate-400" />
+                        <span className="text-xs font-medium text-slate-600">{jogo.hora}</span>
+                      </div>
+                      <div className="flex-1 text-left">
+                        <span className="font-bold text-slate-800 text-sm truncate block max-w-[120px] mr-auto">{jogo.equipe_b_nome}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-start mt-2 pt-2 border-t border-slate-100 gap-4">
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <MapPin className="h-3 w-3" />
+                        {jogo.quadra}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(jogo.data).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center mt-1 bg-slate-50 p-2 rounded border border-slate-100">
-                    <span className="font-bold text-slate-800 text-sm truncate w-2/5 text-right">{jogo.equipe_a_nome}</span>
-                    <span className="text-xs font-black text-slate-400 w-1/5 text-center px-1">X</span>
-                    <span className="font-bold text-slate-800 text-sm truncate w-2/5 text-left">{jogo.equipe_b_nome}</span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -211,4 +244,17 @@ export default function Dashboard() {
 
 function cn(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(' ');
+}
+
+function getTimeIndicator(dataStr: string) {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const jogoData = new Date(dataStr);
+  jogoData.setHours(0, 0, 0, 0);
+  const diffDays = Math.ceil((jogoData.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return { text: 'Hoje', color: 'bg-red-500 text-white' };
+  if (diffDays === 1) return { text: 'Amanhã', color: 'bg-orange-500 text-white' };
+  if (diffDays <= 7) return { text: `Em ${diffDays} dias`, color: 'bg-blue-500 text-white' };
+  return { text: jogoData.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), color: 'bg-slate-200 text-slate-700' };
 }
