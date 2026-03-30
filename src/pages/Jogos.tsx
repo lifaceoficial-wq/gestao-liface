@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, ShieldAlert, Trophy, PlayCircle, Clock, CheckCircle, XCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Search, ShieldAlert, Trophy, PlayCircle, Clock, CheckCircle, XCircle, Calendar as CalendarIcon, Pencil, FileText } from 'lucide-react';
 import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -34,6 +34,18 @@ export default function Jogos() {
   const [sumulaPlacarB, setSumulaPlacarB] = useState(0);
   const [eventosSumula, setEventosSumula] = useState<any[]>([]);
   const [novoEvento, setNovoEvento] = useState({ equipe: '', jogador: '', tipo: 'Gol', tempo: '' });
+
+  // Modal de Editar Jogo
+  const [isEditModalOpen, setEditModalOpen] = useState(false);
+  const [jogoEditando, setJogoEditando] = useState<any>(null);
+  const [editData, setEditData] = useState({
+    data: '',
+    hora: '',
+    quadra: '',
+    rodada: '',
+    equipe_a_nome: '',
+    equipe_b_nome: ''
+  });
 
   useEffect(() => {
     fetchData();
@@ -177,8 +189,24 @@ export default function Jogos() {
     }
   };
 
+  const salvarSumula = async () => {
+    try {
+      const { error: jogoErr } = await supabase.from('jogos').update({
+        jogos_a: sumulaPlacarA,
+        jogos_b: sumulaPlacarB
+      }).eq('id', jogoSumula.id);
+
+      if (jogoErr) throw jogoErr;
+      toast.success('Súmula atualizada!');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar súmula.');
+    }
+  };
+
   const encerrarSumula = async () => {
-    if(!confirm('Tem certeza que deseja encerrar esta súmula? Não poderá mais alterar dados na interface simplificada.')) return;
+    if(!confirm('Tem certeza que deseja encerrar esta súmula? Após encerrar, você ainda poderá editar eventos aqui.')) return;
 
     try {
       // 1. Atualizar Jogo
@@ -243,6 +271,41 @@ export default function Jogos() {
     } catch (err) {
       console.error(err);
       toast.error('Erro ao encerrar a súmula.');
+    }
+  };
+
+  const abrirEditarJogo = (jogo: any) => {
+    setJogoEditando(jogo);
+    setEditData({
+      data: jogo.data || '',
+      hora: jogo.hora || '',
+      quadra: jogo.quadra || '',
+      rodada: jogo.rodada || '',
+      equipe_a_nome: jogo.equipe_a_nome || '',
+      equipe_b_nome: jogo.equipe_b_nome || ''
+    });
+    setEditModalOpen(true);
+  };
+
+  const salvarEdicaoJogo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const loadingToast = toast.loading('Atualizando jogo...');
+    try {
+      const { error } = await supabase.from('jogos').update({
+        data: editData.data,
+        hora: editData.hora,
+        quadra: editData.quadra,
+        rodada: editData.rodada,
+        equipe_a_nome: editData.equipe_a_nome,
+        equipe_b_nome: editData.equipe_b_nome
+      }).eq('id', jogoEditando.id);
+
+      if (error) throw error;
+      toast.success('Jogo atualizado com sucesso!', { id: loadingToast });
+      setEditModalOpen(false);
+      fetchData();
+    } catch (err: any) {
+      toast.error('Erro ao atualizar: ' + err.message, { id: loadingToast });
     }
   };
 
@@ -475,10 +538,20 @@ export default function Jogos() {
                       <button onClick={() => aplicarWO(jogo, jogo.equipe_b_nome)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipe_b_nome}</button>
                     </>
                   )}
-                  {jogo.status !== 'Agendado' && (
-                    <button onClick={() => gerarSumulaPDF(jogo)} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
-                      Visualizar Súmula (PDF)
+                  {jogo.status === 'Encerrado' && (
+                    <button onClick={() => abrirSumula(jogo)} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 shadow-sm">
+                      <Pencil className="h-4 w-4" /> Editar Súmula
                     </button>
+                  )}
+                  {jogo.status !== 'Agendado' && (
+                    <>
+                      <button onClick={() => gerarSumulaPDF(jogo)} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
+                        <FileText className="h-4 w-4" /> Visualizar Súmula (PDF)
+                      </button>
+                      <button onClick={() => abrirEditarJogo(jogo)} className="px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 flex items-center gap-1">
+                        <Pencil className="h-4 w-4" /> Editar
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -539,6 +612,50 @@ export default function Jogos() {
           <div className="pt-4 flex justify-end">
             <button type="button" onClick={() => setFormModalOpen(false)} className="mr-3 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300">Cancelar</button>
             <button type="submit" className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500">Agendar Jogo</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* EDITAR JOGO MODAL */}
+      <Modal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} title="Editar Jogo">
+        <form onSubmit={salvarEdicaoJogo} className="space-y-4">
+          <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 text-sm text-amber-800 flex items-start gap-2">
+            <ShieldAlert className="h-5 w-5 shrink-0" />
+            <p>Edite os dados do jogo. Os times não podem ser alterados após a súmula ser preenchida.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Data</label>
+              <input required type="date" value={editData.data} onChange={e => setEditData({...editData, data: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Hora</label>
+              <input required type="time" value={editData.hora} onChange={e => setEditData({...editData, hora: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Rodada / Fase</label>
+              <input required type="text" value={editData.rodada} onChange={e => setEditData({...editData, rodada: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Quadra (Local)</label>
+              <input required type="text" value={editData.quadra} onChange={e => setEditData({...editData, quadra: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Time Mandante</label>
+              <input disabled value={editData.equipe_a_nome} className="mt-1 block w-full rounded-md border-slate-300 bg-slate-100 py-2 px-3 border shadow-sm text-slate-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Time Visitante</label>
+              <input disabled value={editData.equipe_b_nome} className="mt-1 block w-full rounded-md border-slate-300 bg-slate-100 py-2 px-3 border shadow-sm text-slate-500" />
+            </div>
+          </div>
+          <div className="pt-4 flex justify-end gap-3">
+            <button type="button" onClick={() => setEditModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300">Cancelar</button>
+            <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Salvar Alterações</button>
           </div>
         </form>
       </Modal>
@@ -616,10 +733,16 @@ export default function Jogos() {
           </div>
 
           <div className="pt-4 flex justify-between border-t border-slate-100">
-            <button onClick={() => setSumulaModalOpen(false)} className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 border hover:bg-slate-50">Abandonar sem salvar</button>
-            <button onClick={encerrarSumula} className="flex items-center gap-2 rounded-md bg-emerald-600 px-6 py-2 text-sm font-bold text-white hover:bg-emerald-500 shadow-md">
-              <CheckCircle className="h-5 w-5" /> ASSINAR E ENCERRAR SÚMULA
-            </button>
+            <button onClick={() => setSumulaModalOpen(false)} className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-700 border hover:bg-slate-50">Fechar</button>
+            {jogoSumula?.status === 'Encerrado' ? (
+              <button onClick={salvarSumula} className="flex items-center gap-2 rounded-md bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-500 shadow-md">
+                <CheckCircle className="h-5 w-5" /> SALVAR ALTERAÇÕES
+              </button>
+            ) : (
+              <button onClick={encerrarSumula} className="flex items-center gap-2 rounded-md bg-emerald-600 px-6 py-2 text-sm font-bold text-white hover:bg-emerald-500 shadow-md">
+                <CheckCircle className="h-5 w-5" /> ASSINAR E ENCERRAR SÚMULA
+              </button>
+            )}
           </div>
         </div>
       </Modal>
