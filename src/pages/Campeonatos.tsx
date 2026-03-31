@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
-<<<<<<< HEAD
-import { Plus, Search, Trophy, Users, User, Info, ChevronDown, ChevronUp, Crown, Medal, Star } from 'lucide-react';
-=======
-import { Plus, Search, Filter, Trophy, Users, User, Info, ChevronDown, ChevronUp, Award, Image as ImageIcon, Upload, X, Trash2 } from 'lucide-react';
->>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
+import { Plus, Search, Trophy, Users, User, Info, ChevronDown, ChevronUp, Award, Image as ImageIcon, Trash2, Crown, Medal, Star } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
@@ -37,12 +33,8 @@ export default function Campeonatos() {
     equipesSelecionadas: [] as string[]
   });
 
-<<<<<<< HEAD
-  const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos' | 'proclamar'>('geral');
+  const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos' | 'galeria' | 'proclamar'>('geral');
   const [proclamando, setProclamando] = useState<string | null>(null);
-=======
-  const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos' | 'galeria'>('geral');
->>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
   const [expandedEquipes, setExpandedEquipes] = useState<string[]>([]);
   const [equipesDisponiveis, setEquipesDisponiveis] = useState<any[]>([]);
   const [galeriaFotos, setGaleriaFotos] = useState<any[]>([]);
@@ -70,7 +62,6 @@ export default function Campeonatos() {
     const { data } = await supabase.from('equipes').select('*').order('nome');
     if (data) setEquipesDisponiveis(data);
   };
-
 
   const fetchCampeonatos = async () => {
     try {
@@ -145,8 +136,6 @@ export default function Campeonatos() {
       }).eq('id', campeonatoSelecionado.id);
       if (error) throw error;
 
-      // Resetar campeonato_id das equipes que pertecião a este campeonato 
-      // e depois setar as equipes que estão selecionadas atualmente
       await supabase.from('equipes')
         .update({ campeonato_id: null, campeonato_nome: null })
         .eq('campeonato_id', campeonatoSelecionado.id);
@@ -210,28 +199,27 @@ export default function Campeonatos() {
     });
     setEditModalOpen(true);
     
-    // Fetch equipes do campeonato para pre-selecionar
     const { data: eqs } = await supabase.from('equipes').select('id').eq('campeonato_id', campeonato.id);
     if (eqs) {
       setFormData(prev => ({ ...prev, equipesSelecionadas: eqs.map(e => e.id) }));
     }
   };
 
-  const abrirDetalhes = async (selectedChampionship: any) => {
-    setCampeonatoSelecionado(selectedChampionship);
-    setSelectedChampionship(selectedChampionship);
+  const abrirDetalhes = async (champ: any) => {
+    setCampeonatoSelecionado(champ);
+    setSelectedChampionship(champ);
     setHistoricoTab('geral');
     setExpandedEquipes([]);
     
     try {
-      const { data: eq } = await supabase.from('equipes').select('*').eq('championship_id', selectedChampionship.id);
+      const { data: eq } = await supabase.from('equipes').select('*').eq('championship_id', champ.id);
       setEquipesCampeonato(eq || []);
       
       const eqNames = (eq || []).map(e => e.nome);
       const { data: at } = await supabase.from('atletas').select('*').in('equipe_nome', eqNames.length ? eqNames : ['_NONE_']);
       setAtletasCampeonato(at || []);
 
-      const { data: jg } = await supabase.from('jogos').select('*').eq('championship_id', selectedChampionship.id);
+      const { data: jg } = await supabase.from('jogos').select('*').eq('championship_id', champ.id);
       setJogosCampeonato((jg || []).filter(j => j.status === 'Encerrado' || j.status === 'W.O'));
       
       setDetalhesModalOpen(true);
@@ -240,13 +228,11 @@ export default function Campeonatos() {
     }
   };
 
-<<<<<<< HEAD
   const proclamarCampeao = async (equipeNome: string, posicao: string) => {
     if (!campeonatoSelecionado) return;
     const key = `${equipeNome}-${posicao}`;
     setProclamando(key);
     try {
-      // Verifica se já existe entrada para evitar duplicata
       const { data: existing } = await supabase
         .from('campeoes')
         .select('id')
@@ -274,7 +260,9 @@ export default function Campeonatos() {
       toast.error('Erro ao proclamar: ' + err.message);
     } finally {
       setProclamando(null);
-=======
+    }
+  };
+
   const fetchGaleria = async () => {
     if (!selectedChampionship) return;
     setLoadingGaleria(true);
@@ -325,11 +313,10 @@ export default function Campeonatos() {
     }
   };
 
-  const handleTabChange = (tab: 'geral' | 'elencos' | 'galeria') => {
+  const handleTabChange = (tab: 'geral' | 'elencos' | 'galeria' | 'proclamar') => {
     setHistoricoTab(tab);
     if (tab === 'galeria') {
       fetchGaleria();
->>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
     }
   };
 
@@ -360,6 +347,7 @@ export default function Campeonatos() {
       return b.GP - a.GP;
     });
   };
+  
   const tabelaClassificacao = getClassificacao();
 
   return (
@@ -395,7 +383,7 @@ export default function Campeonatos() {
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[60vh]">
         {loading ? (
-           <div className="text-center p-12"><p className="text-slate-500">Carregando campeonatos do banco de dados...</p></div>
+           <div className="text-center p-12"><p className="text-slate-500">Carregando campeonatos...</p></div>
         ) : filteredItems.length === 0 ? (
           <div className="text-center p-12">
             <p className="text-slate-500">Nenhum campeonato encontrado.</p>
@@ -404,12 +392,12 @@ export default function Campeonatos() {
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">Nome do Campeonato</th>
+                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">Nome</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Categoria</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Ano/Edição</th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Ano</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Período</th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">Status</th>
-                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 whitespace-nowrap text-right">Ações</th>
+                <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
@@ -429,10 +417,9 @@ export default function Campeonatos() {
                   <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                     <div className="flex justify-end gap-2">
                       <button onClick={() => abrirDetalhes(campeonato)} className="inline-flex items-center text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-2.5 py-1.5 rounded-md border border-emerald-200 hover:bg-emerald-100">
-                        <Info className="h-4 w-4 mr-1" />
-                        Histórico
+                        <Info className="h-4 w-4 mr-1" /> Histórico
                       </button>
-                      <button onClick={() => abrirEditar(campeonato)} className="inline-flex items-center text-blue-600 hover:text-blue-900 bg-white px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50">
+                      <button onClick={() => abrirEditar(campeonato)} className="text-blue-600 hover:text-blue-900 bg-white px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50">
                         Editar
                       </button>
                     </div>
@@ -457,31 +444,9 @@ export default function Campeonatos() {
             <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
             <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
-          
-          <div className="border border-slate-200 rounded-md p-3 max-h-48 overflow-y-auto">
-            <span className="block text-sm font-medium text-slate-700 mb-2">Vincular Equipes do Banco (Opcional):</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {equipesDisponiveis.map(eq => (
-                <label key={eq.id} className="flex items-center space-x-2 text-sm bg-slate-50 p-2 rounded border border-slate-100 cursor-pointer hover:bg-blue-50">
-                  <input 
-                    type="checkbox" 
-                    className="rounded text-blue-600 border-slate-300 focus:ring-blue-600"
-                    checked={formData.equipesSelecionadas.includes(eq.id)}
-                    onChange={(e) => {
-                      if(e.target.checked) setFormData({...formData, equipesSelecionadas: [...formData.equipesSelecionadas, eq.id]});
-                      else setFormData({...formData, equipesSelecionadas: formData.equipesSelecionadas.filter(id => id !== eq.id)});
-                    }}
-                  />
-                  <span className="truncate" title={eq.nome}>{eq.nome}</span>
-                </label>
-              ))}
-              {equipesDisponiveis.length === 0 && <span className="text-xs text-slate-400">Nenhuma equipe cadastrada</span>}
-            </div>
-          </div>
-
           <div className="pt-4 flex justify-end space-x-3 border-t border-slate-100 mt-6">
-            <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm border hover:bg-slate-50">Cancelar</button>
-            <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Salvar Campeonato</button>
+            <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold border hover:bg-slate-50">Cancelar</button>
+            <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500">Salvar</button>
           </div>
         </form>
       </Modal>
@@ -498,28 +463,6 @@ export default function Campeonatos() {
             <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
             <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
-
-          <div className="border border-slate-200 rounded-md p-3 max-h-48 overflow-y-auto">
-            <span className="block text-sm font-medium text-slate-700 mb-2">Vincular Equipes do Banco (Opcional):</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {equipesDisponiveis.map(eq => (
-                <label key={eq.id} className="flex items-center space-x-2 text-sm bg-slate-50 p-2 rounded border border-slate-100 cursor-pointer hover:bg-blue-50">
-                  <input 
-                    type="checkbox" 
-                    className="rounded text-blue-600 border-slate-300 focus:ring-blue-600"
-                    checked={formData.equipesSelecionadas.includes(eq.id)}
-                    onChange={(e) => {
-                      if(e.target.checked) setFormData({...formData, equipesSelecionadas: [...formData.equipesSelecionadas, eq.id]});
-                      else setFormData({...formData, equipesSelecionadas: formData.equipesSelecionadas.filter(id => id !== eq.id)});
-                    }}
-                  />
-                  <span className="truncate" title={eq.nome}>{eq.nome}</span>
-                </label>
-              ))}
-              {equipesDisponiveis.length === 0 && <span className="text-xs text-slate-400">Nenhuma equipe cadastrada</span>}
-            </div>
-          </div>
-
           <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-6">
             <button type="button" onClick={excluirCampeonato} className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100">Excluir</button>
             <div className="flex space-x-3">
@@ -532,187 +475,170 @@ export default function Campeonatos() {
 
       <Modal isOpen={isDetalhesModalOpen} onClose={() => setDetalhesModalOpen(false)} title={`Histórico: ${campeonatoSelecionado?.nome}`} maxWidth="max-w-5xl">
         <div className="space-y-6 flex flex-col h-full">
-<<<<<<< HEAD
           <div className="flex border-b border-slate-200 overflow-x-auto">
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('geral')}>Visão Geral & Tabela</button>
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('elencos')}>Elencos Oficiais</button>
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${historicoTab === 'proclamar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('proclamar')}><Crown className="w-4 h-4" /> Proclamar Campeões</button>
-=======
-          <div className="flex border-b border-slate-200">
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('geral')}>Visão Geral & Tabela</button>
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('elencos')}>Elencos Oficiais</button>
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'galeria' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('galeria')}><span className="flex items-center gap-2"><Award className="h-4 w-4" />Galeria dos Campeões</span></button>
->>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('geral')}>Visão Geral & Tabela</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('elencos')}>Elencos Oficiais</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${historicoTab === 'galeria' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('galeria')}><ImageIcon className="h-4 w-4" /> Galeria</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${historicoTab === 'proclamar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('proclamar')}><Crown className="w-4 h-4" /> Proclamar Campeões</button>
           </div>
-          {historicoTab === 'geral' && (
-            <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center">
-                  <div className="rounded-full bg-blue-100 p-3 mr-4"><Trophy className="h-6 w-6 text-blue-600" /></div>
-                  <div><p className="text-sm font-medium text-blue-900">Equipes INSCRITAS</p><p className="text-2xl font-bold text-blue-700">{equipesCampeonato.length}</p></div>
-                </div>
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex items-center">
-                  <div className="rounded-full bg-emerald-100 p-3 mr-4"><Users className="h-6 w-6 text-emerald-600" /></div>
-                  <div><p className="text-sm font-medium text-emerald-900">Atletas Mapeados</p><p className="text-2xl font-bold text-emerald-700">{atletasCampeonato.length}</p></div>
-                </div>
-              </div>
-              {equipesCampeonato.length > 0 && (
-                <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm mb-6">
-                  <div className="bg-slate-900 px-4 py-3 flex justify-between items-center text-white">
-                    <h3 className="font-bold flex items-center gap-2"><Trophy className="h-4 w-4 text-emerald-400"/> Tabela de Classificação Atualizada</h3>
-                  </div>
-                  <div className="overflow-x-auto bg-white">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-semibold text-slate-500">POS</th><th className="px-4 py-2 text-left font-semibold text-slate-500">EQUIPE</th>
-                          <th className="px-4 py-2 text-center font-bold text-slate-900 bg-slate-100">P</th><th className="px-4 py-2 text-center font-semibold text-slate-500">J</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">V</th><th className="px-4 py-2 text-center font-semibold text-slate-500">E</th>
-                          <th className="px-4 py-2 text-center font-semibold text-slate-500">D</th><th className="px-4 py-2 text-center font-semibold text-slate-500">SG</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {tabelaClassificacao.map((row: any, i) => (
-                          <tr key={row.nome} className={i < 4 ? "bg-emerald-50/30" : ""}>
-                            <td className="px-4 py-2 font-bold text-slate-700">{i + 1}º</td><td className="px-4 py-2 font-bold text-slate-800">{row.nome}</td>
-                            <td className="px-4 py-2 text-center font-black bg-slate-50">{row.P}</td><td className="px-4 py-2 text-center text-slate-600">{row.J}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.V}</td><td className="px-4 py-2 text-center text-slate-600">{row.E}</td>
-                            <td className="px-4 py-2 text-center text-slate-600">{row.D}</td><td className="px-4 py-2 text-center text-slate-600">{row.SG}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {historicoTab === 'elencos' && (
-            <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-              <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-2"><Users className="h-5 w-5 text-slate-400" /> Elencos Oficiais do Campeonato</h3>
-              {equipesCampeonato.map((equipe: any) => {
-                  const jogadores = atletasCampeonato.filter((a: any) => a.equipe_id === equipe.id || a.equipe_nome === equipe.nome);
-                  const isExpanded = expandedEquipes.includes(equipe.id);
-                  return (
-                    <div key={equipe.id} className="border border-slate-200 rounded-lg overflow-hidden shadow-sm transition-all duration-200">
-                      <button type="button" onClick={() => toggleEquipe(equipe.id)} className={`w-full px-4 py-3 flex justify-between items-center text-left ${isExpanded ? 'bg-blue-50 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
-                        <div className="flex items-center gap-3"><div className={`h-8 w-8 rounded-full flex items-center justify-center ${isExpanded ? 'bg-blue-200' : 'bg-slate-100'}`}><Users className="h-4 w-4" /></div><h4 className="font-bold">{equipe.nome}</h4></div>
-                        <div className="flex items-center gap-3"><span className="text-xs font-semibold px-3 py-1 rounded-full shadow-sm border bg-white">{jogadores.length} atletas</span>{isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
-                      </button>
-                      {isExpanded && (
-                        <div className="p-4 bg-slate-50 border-t border-slate-100">
-                          {jogadores.length === 0 ? <p className="text-sm text-slate-400 italic text-center py-6">Nenhum atleta cadastrado.</p> : (
-                            <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {jogadores.map((jogador: any) => (
-                                <li key={jogador.id} className="flex flex-col text-sm text-slate-700 bg-white p-2.5 rounded-md border border-slate-200 hover:border-blue-300">
-                                  <div className="flex items-start gap-2"><User className="h-4 w-4 text-slate-400 mt-0.5" /><span className="font-semibold">{jogador.nome}</span></div>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-            </div>
-          )}
-<<<<<<< HEAD
-          {historicoTab === 'proclamar' && (
-            <div className="space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
-                <Crown className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>Baseado na tabela de classificação atual. Clique em <strong>Proclamar</strong> para enviar automaticamente ao Hall of Fame. Depois, adicione as fotos lá.</span>
-              </div>
 
-              {tabelaClassificacao.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-8">Nenhum jogo encerrado ainda para calcular classificação.</p>
-              ) : (
-                <div className="space-y-3">
-                  {[
-                    { posicao: 'Campeão',      icon: <Crown className="w-5 h-5 text-amber-500" />,  bg: 'bg-amber-50 border-amber-200',  idx: 0 },
-                    { posicao: 'Vice-Campeão', icon: <Medal className="w-5 h-5 text-slate-400" />,  bg: 'bg-slate-50 border-slate-200',  idx: 1 },
-                    { posicao: '3º Lugar',     icon: <Star  className="w-5 h-5 text-orange-400" />, bg: 'bg-orange-50 border-orange-200', idx: 2 },
-                  ].map(({ posicao, icon, bg, idx }) => {
-                    const equipe = tabelaClassificacao[idx];
-                    if (!equipe) return null;
-                    const isLoading = proclamando === `${equipe.nome}-${posicao}`;
+          <div className="overflow-y-auto pr-2 custom-scrollbar min-h-[300px]">
+            {historicoTab === 'geral' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center">
+                    <div className="rounded-full bg-blue-100 p-3 mr-4"><Trophy className="h-6 w-6 text-blue-600" /></div>
+                    <div><p className="text-sm font-medium text-blue-900">Equipes INSCRITAS</p><p className="text-2xl font-bold text-blue-700">{equipesCampeonato.length}</p></div>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex items-center">
+                    <div className="rounded-full bg-emerald-100 p-3 mr-4"><Users className="h-6 w-6 text-emerald-600" /></div>
+                    <div><p className="text-sm font-medium text-emerald-900">Atletas Mapeados</p><p className="text-2xl font-bold text-emerald-700">{atletasCampeonato.length}</p></div>
+                  </div>
+                </div>
+                {equipesCampeonato.length > 0 && (
+                  <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                    <div className="bg-slate-900 px-4 py-3 flex justify-between items-center text-white">
+                      <h3 className="font-bold flex items-center gap-2 font-sm"><Trophy className="h-4 w-4 text-emerald-400"/> Tabela de Classificação</h3>
+                    </div>
+                    <div className="overflow-x-auto bg-white">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-semibold text-slate-500">POS</th><th className="px-4 py-2 text-left font-semibold text-slate-500">EQUIPE</th>
+                            <th className="px-4 py-2 text-center font-bold text-slate-900 bg-slate-100">P</th><th className="px-4 py-2 text-center font-semibold text-slate-500">J</th>
+                            <th className="px-4 py-2 text-center font-semibold text-slate-500">V</th><th className="px-4 py-2 text-center font-semibold text-slate-500">E</th>
+                            <th className="px-4 py-2 text-center font-semibold text-slate-500">D</th><th className="px-4 py-2 text-center font-semibold text-slate-500">SG</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {tabelaClassificacao.map((row: any, i) => (
+                            <tr key={row.nome} className={i < 4 ? "bg-emerald-50/30" : ""}>
+                              <td className="px-4 py-2 font-bold text-slate-700">{i + 1}º</td><td className="px-4 py-2 font-bold text-slate-800">{row.nome}</td>
+                              <td className="px-4 py-2 text-center font-black bg-slate-50">{row.P}</td><td className="px-4 py-2 text-center text-slate-600">{row.J}</td>
+                              <td className="px-4 py-2 text-center text-slate-600">{row.V}</td><td className="px-4 py-2 text-center text-slate-600">{row.E}</td>
+                              <td className="px-4 py-2 text-center text-slate-600">{row.D}</td><td className="px-4 py-2 text-center text-slate-600">{row.SG}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {historicoTab === 'elencos' && (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-2"><Users className="h-5 w-5 text-slate-400" /> Elencos Oficiais</h3>
+                {equipesCampeonato.map((equipe: any) => {
+                    const jogadores = atletasCampeonato.filter((a: any) => a.equipe_id === equipe.id || a.equipe_nome === equipe.nome);
+                    const isExpanded = expandedEquipes.includes(equipe.id);
                     return (
-                      <div key={posicao} className={`flex items-center justify-between rounded-xl border p-4 ${bg}`}>
-                        <div className="flex items-center gap-3">
-                          {icon}
-                          <div>
-                            <p className="font-bold text-slate-900 text-sm">{equipe.nome}</p>
-                            <p className="text-xs text-slate-500">{posicao} · {equipe.P} pts · {equipe.V}V {equipe.E}E {equipe.D}D</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={isLoading}
-                          onClick={() => proclamarCampeao(equipe.nome, posicao)}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-60 transition-colors"
-                        >
-                          {isLoading ? (
-                            <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Crown className="w-3 h-3" />
-                          )}
-                          Proclamar
+                      <div key={equipe.id} className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                        <button type="button" onClick={() => toggleEquipe(equipe.id)} className={`w-full px-4 py-3 flex justify-between items-center text-left ${isExpanded ? 'bg-blue-50 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
+                          <div className="flex items-center gap-3"><div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center"><Users className="h-4 w-4" /></div><h4 className="font-bold">{equipe.nome}</h4></div>
+                          <div className="flex items-center gap-3"><span className="text-xs font-semibold px-3 py-1 rounded-full border bg-white">{jogadores.length} atletas</span>{isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
                         </button>
+                        {isExpanded && (
+                          <div className="p-4 bg-slate-50 border-t border-slate-100">
+                            {jogadores.length === 0 ? <p className="text-sm text-slate-400 italic text-center py-6">Nenhum atleta cadastrado.</p> : (
+                              <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                {jogadores.map((jogador: any) => (
+                                  <li key={jogador.id} className="flex items-start gap-2 text-sm text-slate-700 bg-white p-2.5 rounded-md border border-slate-200">
+                                    <User className="h-4 w-4 text-slate-400 mt-0.5" /><span className="font-semibold">{jogador.nome}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
-                  })}
-=======
-          {historicoTab === 'galeria' && (
-            <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-slate-900 flex items-center gap-2"><Award className="h-5 w-5 text-amber-500" /> Galeria dos Campeões</h3>
-                <span className="text-sm text-slate-500">{galeriaFotos.length} fotos</span>
+                })}
               </div>
+            )}
 
-              <form onSubmit={handleSalvarFoto} className="flex flex-col sm:flex-row gap-2 sm:items-end bg-slate-50 p-3 rounded-lg border border-slate-200 shadow-sm mb-4">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Título da Foto</label>
-                  <input required type="text" value={novaFoto.titulo} onChange={(e) => setNovaFoto({...novaFoto, titulo: e.target.value})} className="block w-full rounded-md border-slate-300 py-1.5 px-3 border shadow-sm text-sm" placeholder="Ex: Campeões 2025" />
+            {historicoTab === 'proclamar' && (
+              <div className="space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
+                  <Crown className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>Baseado na classificação atual. Envie os vencedores ao Hall of Fame.</span>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-slate-700 mb-1">URL da Imagem</label>
-                  <input required type="url" value={novaFoto.url} onChange={(e) => setNovaFoto({...novaFoto, url: e.target.value})} className="block w-full rounded-md border-slate-300 py-1.5 px-3 border shadow-sm text-sm" placeholder="https://exemplo.com/foto.jpg" />
-                </div>
-                <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm font-medium sm:h-[34px] flex items-center justify-center gap-1 transition-colors">
-                  <Plus className="h-4 w-4" /> Adicionar
-                </button>
-              </form>
-              
-              {loadingGaleria ? (
-                <div className="text-center py-8"><p className="text-slate-500">Carregando fotos...</p></div>
-              ) : galeriaFotos.length === 0 ? (
-                <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-                  <ImageIcon className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500 font-medium">Nenhuma foto na galeria</p>
-                  <p className="text-sm text-slate-400 mt-1">Adicione fotos dos campeões deste campeonato</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {galeriaFotos.map((foto: any) => (
-                    <div key={foto.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
-                      {foto.url ? (
-                        <img src={foto.url} alt={foto.titulo || 'Foto'} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="flex items-center justify-center h-full"><ImageIcon className="h-8 w-8 text-slate-300" /></div>
-                      )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button type="button" onClick={() => handleExcluirFoto(foto.id)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                {tabelaClassificacao.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">Nenhum jogo encerrado.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {[
+                      { posicao: 'Campeão', icon: <Crown className="w-5 h-5 text-amber-500" />, bg: 'bg-amber-50 border-amber-200', idx: 0 },
+                      { posicao: 'Vice-Campeão', icon: <Medal className="w-5 h-5 text-slate-400" />, bg: 'bg-slate-50 border-slate-200', idx: 1 },
+                      { posicao: '3º Lugar', icon: <Star className="w-5 h-5 text-orange-400" />, bg: 'bg-orange-50 border-orange-200', idx: 2 },
+                    ].map(({ posicao, icon, bg, idx }) => {
+                      const equipe = tabelaClassificacao[idx];
+                      if (!equipe) return null;
+                      const isLoading = proclamando === `${equipe.nome}-${posicao}`;
+                      return (
+                        <div key={posicao} className={`flex items-center justify-between rounded-xl border p-4 ${bg}`}>
+                          <div className="flex items-center gap-3">
+                            {icon}
+                            <div>
+                              <p className="font-bold text-slate-900 text-sm">{equipe.nome}</p>
+                              <p className="text-xs text-slate-500">{posicao} · {equipe.P} pts</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isLoading}
+                            onClick={() => proclamarCampeao(equipe.nome, posicao)}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+                          >
+                            {isLoading ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Crown className="w-3 h-3" />}
+                            Proclamar
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {historicoTab === 'galeria' && (
+              <div className="space-y-4">
+                <form onSubmit={handleSalvarFoto} className="flex flex-col sm:flex-row gap-2 bg-slate-50 p-3 rounded-lg border">
+                  <div className="flex-1">
+                    <input required type="text" value={novaFoto.titulo} onChange={(e) => setNovaFoto({...novaFoto, titulo: e.target.value})} className="block w-full rounded-md border-slate-300 py-1.5 px-3 border text-sm" placeholder="Título da Foto" />
+                  </div>
+                  <div className="flex-1">
+                    <input required type="url" value={novaFoto.url} onChange={(e) => setNovaFoto({...novaFoto, url: e.target.value})} className="block w-full rounded-md border-slate-300 py-1.5 px-3 border text-sm" placeholder="URL da Imagem" />
+                  </div>
+                  <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm font-medium">Adicionar</button>
+                </form>
+                
+                {loadingGaleria ? (
+                  <div className="text-center py-8 text-slate-500">Carregando...</div>
+                ) : galeriaFotos.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                    <ImageIcon className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">Galeria Vazia</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {galeriaFotos.map((foto: any) => (
+                      <div key={foto.id} className="relative group aspect-square rounded-lg overflow-hidden border bg-slate-100">
+                        <img src={foto.url} alt={foto.titulo} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button type="button" onClick={() => handleExcluirFoto(foto.id)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 p-2"><p className="text-white text-xs truncate">{foto.titulo}</p></div>
                       </div>
-                      {foto.titulo && <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2"><p className="text-white text-xs font-medium truncate">{foto.titulo}</p></div>}
-                    </div>
-                  ))}
->>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
-                </div>
-              )}
-            </div>
-          )}
-          <div className="pt-4 flex justify-end border-t border-slate-100">
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-4 flex justify-end border-t border-slate-100 mt-auto">
             <button type="button" onClick={() => setDetalhesModalOpen(false)} className="rounded-md bg-white border px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm">Fechar</button>
           </div>
         </div>
