@@ -19,6 +19,7 @@ const navigation = [
   { name: 'Equipes', href: '/equipes', icon: Users },
   { name: 'Atletas', href: '/atletas', icon: User },
   { name: 'Árbitros', href: '/arbitros', icon: Gavel },
+  { name: 'Campeões', href: '/campeas', icon: Trophy },
   { name: 'Diretoria', href: '/diretoria', icon: Briefcase },
   { name: 'Suspensões', href: '/suspensoes', icon: ShieldAlert },
   { name: 'Financeiro', href: '/financeiro', icon: Wallet },

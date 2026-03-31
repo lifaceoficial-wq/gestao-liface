@@ -13,6 +13,7 @@ import Jogos from './pages/Jogos';
 import Equipes from './pages/Equipes';
 import Atletas from './pages/Atletas';
 import Arbitros from './pages/Arbitros';
+import Campeoes from './pages/Campeoes';
 import Diretoria from './pages/Diretoria';
 import Suspensoes from './pages/Suspensoes';
 import Financeiro from './pages/Financeiro';
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="equipes" element={<Equipes />} />
             <Route path="atletas" element={<Atletas />} />
             <Route path="arbitros" element={<Arbitros />} />
+            <Route path="campeas" element={<Campeoes />} />
             <Route path="diretoria" element={<Diretoria />} />
             <Route path="suspensoes" element={<Suspensoes />} />
             <Route path="financeiro" element={<Financeiro />} />

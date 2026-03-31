@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS public.financeiro (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   descricao   TEXT NOT NULL,
   equipe      TEXT NOT NULL,
-  vencimento  TEXT NOT NULL,          -- Ex: "10/06/2026"
+  vencimento  DATE NOT NULL,             -- Data de vencimento
   valor       NUMERIC(10, 2) NOT NULL,
   status      TEXT NOT NULL DEFAULT 'Pendente', -- Pendente, Pago, Atrasado
   tipo        TEXT DEFAULT 'receita', -- receita, despesa
@@ -153,6 +153,21 @@ CREATE TABLE IF NOT EXISTS public.diretoria (
 );
 
 -- ============================================================
+-- TABELA: campeoes (histórico de campeões por edição)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.campeoes (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome        TEXT NOT NULL,
+  equipe      TEXT NOT NULL,
+  categoria   TEXT NOT NULL DEFAULT 'Adulto',
+  ano         INTEGER NOT NULL,
+  posicao     TEXT NOT NULL DEFAULT 'Campeão',
+  foto_url    TEXT,
+  criado_em   TIMESTAMPTZ DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
 -- TRIGGERS: atualizar campo atualizado_em automaticamente
 -- ============================================================
 CREATE OR REPLACE FUNCTION public.set_updated_at()
@@ -163,29 +178,52 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_campeonatos_updated_at ON public.campeonatos;
 CREATE TRIGGER trg_campeonatos_updated_at
   BEFORE UPDATE ON public.campeonatos
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_equipes_updated_at ON public.equipes;
 CREATE TRIGGER trg_equipes_updated_at
   BEFORE UPDATE ON public.equipes
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_atletas_updated_at ON public.atletas;
 CREATE TRIGGER trg_atletas_updated_at
   BEFORE UPDATE ON public.atletas
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_jogos_updated_at ON public.jogos;
 CREATE TRIGGER trg_jogos_updated_at
   BEFORE UPDATE ON public.jogos
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_suspensoes_updated_at ON public.suspensoes;
 CREATE TRIGGER trg_suspensoes_updated_at
   BEFORE UPDATE ON public.suspensoes
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_financeiro_updated_at ON public.financeiro;
 CREATE TRIGGER trg_financeiro_updated_at
   BEFORE UPDATE ON public.financeiro
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_arbitros_updated_at ON public.arbitros;
+CREATE TRIGGER trg_arbitros_updated_at
+  BEFORE UPDATE ON public.arbitros
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_diretoria_updated_at ON public.diretoria;
+CREATE TRIGGER trg_diretoria_updated_at
+  BEFORE UPDATE ON public.diretoria
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_campeoes_updated_at ON public.campeoes;
+CREATE TRIGGER trg_campeoes_updated_at
+  BEFORE UPDATE ON public.campeoes
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -200,6 +238,7 @@ ALTER TABLE public.suspensoes   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.financeiro   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.arbitros     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.diretoria    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campeoes     ENABLE ROW LEVEL SECURITY;
 
 -- Política: usuários autenticados têm acesso total
 CREATE POLICY "Acesso total para autenticados" ON public.campeonatos
@@ -229,6 +268,9 @@ CREATE POLICY "Acesso total para autenticados" ON public.arbitros
 CREATE POLICY "Acesso total para autenticados" ON public.diretoria
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
+CREATE POLICY "Acesso total para autenticados" ON public.campeoes
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
 -- ============================================================
 -- ÍNDICES para performance
 -- ============================================================
@@ -239,3 +281,4 @@ CREATE INDEX IF NOT EXISTS idx_jogos_status          ON public.jogos(status);
 CREATE INDEX IF NOT EXISTS idx_eventos_jogo_id       ON public.eventos_jogo(jogo_id);
 CREATE INDEX IF NOT EXISTS idx_suspensoes_status     ON public.suspensoes(status);
 CREATE INDEX IF NOT EXISTS idx_financeiro_status     ON public.financeiro(status);
+CREATE INDEX IF NOT EXISTS idx_campeoes_ano          ON public.campeoes(ano);

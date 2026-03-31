@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Trophy, Users, User, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, Trophy, Users, User, Info, ChevronDown, ChevronUp, Crown, Medal, Star } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
@@ -33,7 +33,8 @@ export default function Campeonatos() {
     equipesSelecionadas: [] as string[]
   });
 
-  const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos'>('geral');
+  const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos' | 'proclamar'>('geral');
+  const [proclamando, setProclamando] = useState<string | null>(null);
   const [expandedEquipes, setExpandedEquipes] = useState<string[]>([]);
   const [equipesDisponiveis, setEquipesDisponiveis] = useState<any[]>([]);
 
@@ -226,6 +227,42 @@ export default function Campeonatos() {
       setDetalhesModalOpen(true);
     } catch(err) {
       toast.error('Erro ao buscar dados do histórico');
+    }
+  };
+
+  const proclamarCampeao = async (equipeNome: string, posicao: string) => {
+    if (!campeonatoSelecionado) return;
+    const key = `${equipeNome}-${posicao}`;
+    setProclamando(key);
+    try {
+      // Verifica se já existe entrada para evitar duplicata
+      const { data: existing } = await supabase
+        .from('campeoes')
+        .select('id')
+        .eq('equipe', equipeNome)
+        .eq('ano', parseInt(campeonatoSelecionado.edicao))
+        .eq('posicao', posicao)
+        .maybeSingle();
+
+      if (existing) {
+        toast('Já proclamado! Acesse o Hall of Fame para adicionar a foto.', { icon: 'ℹ️' });
+        return;
+      }
+
+      const { error } = await supabase.from('campeoes').insert([{
+        nome: equipeNome,
+        equipe: equipeNome,
+        categoria: campeonatoSelecionado.categoria,
+        ano: parseInt(campeonatoSelecionado.edicao),
+        posicao,
+        foto_url: null,
+      }]);
+      if (error) throw error;
+      toast.success(`${posicao} proclamado no Hall of Fame! ✅`);
+    } catch (err: any) {
+      toast.error('Erro ao proclamar: ' + err.message);
+    } finally {
+      setProclamando(null);
     }
   };
 
@@ -428,9 +465,10 @@ export default function Campeonatos() {
 
       <Modal isOpen={isDetalhesModalOpen} onClose={() => setDetalhesModalOpen(false)} title={`Histórico: ${campeonatoSelecionado?.nome}`} maxWidth="max-w-5xl">
         <div className="space-y-6 flex flex-col h-full">
-          <div className="flex border-b border-slate-200">
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('geral')}>Visão Geral & Tabela</button>
-            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('elencos')}>Elencos Oficiais</button>
+          <div className="flex border-b border-slate-200 overflow-x-auto">
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('geral')}>Visão Geral & Tabela</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('elencos')}>Elencos Oficiais</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${historicoTab === 'proclamar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('proclamar')}><Crown className="w-4 h-4" /> Proclamar Campeões</button>
           </div>
           {historicoTab === 'geral' && (
             <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar">
@@ -503,6 +541,54 @@ export default function Campeonatos() {
                     </div>
                   )
                 })}
+            </div>
+          )}
+          {historicoTab === 'proclamar' && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
+                <Crown className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>Baseado na tabela de classificação atual. Clique em <strong>Proclamar</strong> para enviar automaticamente ao Hall of Fame. Depois, adicione as fotos lá.</span>
+              </div>
+
+              {tabelaClassificacao.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">Nenhum jogo encerrado ainda para calcular classificação.</p>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { posicao: 'Campeão',      icon: <Crown className="w-5 h-5 text-amber-500" />,  bg: 'bg-amber-50 border-amber-200',  idx: 0 },
+                    { posicao: 'Vice-Campeão', icon: <Medal className="w-5 h-5 text-slate-400" />,  bg: 'bg-slate-50 border-slate-200',  idx: 1 },
+                    { posicao: '3º Lugar',     icon: <Star  className="w-5 h-5 text-orange-400" />, bg: 'bg-orange-50 border-orange-200', idx: 2 },
+                  ].map(({ posicao, icon, bg, idx }) => {
+                    const equipe = tabelaClassificacao[idx];
+                    if (!equipe) return null;
+                    const isLoading = proclamando === `${equipe.nome}-${posicao}`;
+                    return (
+                      <div key={posicao} className={`flex items-center justify-between rounded-xl border p-4 ${bg}`}>
+                        <div className="flex items-center gap-3">
+                          {icon}
+                          <div>
+                            <p className="font-bold text-slate-900 text-sm">{equipe.nome}</p>
+                            <p className="text-xs text-slate-500">{posicao} · {equipe.P} pts · {equipe.V}V {equipe.E}E {equipe.D}D</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isLoading}
+                          onClick={() => proclamarCampeao(equipe.nome, posicao)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-60 transition-colors"
+                        >
+                          {isLoading ? (
+                            <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Crown className="w-3 h-3" />
+                          )}
+                          Proclamar
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           <div className="pt-4 flex justify-end border-t border-slate-100">
