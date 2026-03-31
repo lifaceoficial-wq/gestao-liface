@@ -281,4 +281,27 @@ CREATE INDEX IF NOT EXISTS idx_jogos_status          ON public.jogos(status);
 CREATE INDEX IF NOT EXISTS idx_eventos_jogo_id       ON public.eventos_jogo(jogo_id);
 CREATE INDEX IF NOT EXISTS idx_suspensoes_status     ON public.suspensoes(status);
 CREATE INDEX IF NOT EXISTS idx_financeiro_status     ON public.financeiro(status);
+<<<<<<< HEAD
 CREATE INDEX IF NOT EXISTS idx_campeoes_ano          ON public.campeoes(ano);
+=======
+
+-- ============================================================
+-- TABELA: galeria_campeoes (fotos dos campeões)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.galeria_campeoes (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  championship_id UUID REFERENCES public.campeonato(id) ON DELETE CASCADE,
+  url             TEXT NOT NULL,
+  titulo          TEXT,
+  criado_em       TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.galeria_campeoes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Acesso total para autenticados" ON public.galeria_campeoes;
+CREATE POLICY "Acesso total para autenticados" ON public.galeria_campeoes
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP INDEX IF EXISTS idx_galeria_campeoes_championship_id;
+CREATE INDEX idx_galeria_campeoes_championship_id ON public.galeria_campeoes(championship_id);
+>>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9

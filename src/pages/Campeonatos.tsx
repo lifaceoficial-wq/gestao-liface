@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
+<<<<<<< HEAD
 import { Plus, Search, Trophy, Users, User, Info, ChevronDown, ChevronUp, Crown, Medal, Star } from 'lucide-react';
+=======
+import { Plus, Search, Filter, Trophy, Users, User, Info, ChevronDown, ChevronUp, Award, Image as ImageIcon, Upload, X, Trash2 } from 'lucide-react';
+>>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
@@ -33,10 +37,18 @@ export default function Campeonatos() {
     equipesSelecionadas: [] as string[]
   });
 
+<<<<<<< HEAD
   const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos' | 'proclamar'>('geral');
   const [proclamando, setProclamando] = useState<string | null>(null);
+=======
+  const [historicoTab, setHistoricoTab] = useState<'geral' | 'elencos' | 'galeria'>('geral');
+>>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
   const [expandedEquipes, setExpandedEquipes] = useState<string[]>([]);
   const [equipesDisponiveis, setEquipesDisponiveis] = useState<any[]>([]);
+  const [galeriaFotos, setGaleriaFotos] = useState<any[]>([]);
+  const [loadingGaleria, setLoadingGaleria] = useState(false);
+  const [selectedChampionship, setSelectedChampionship] = useState<any>(null);
+  const [novaFoto, setNovaFoto] = useState({ titulo: '', url: '' });
 
   useEffect(() => {
     fetchCampeonatos();
@@ -205,23 +217,21 @@ export default function Campeonatos() {
     }
   };
 
-  const abrirDetalhes = async (campeonato: any) => {
-    setCampeonatoSelecionado(campeonato);
+  const abrirDetalhes = async (selectedChampionship: any) => {
+    setCampeonatoSelecionado(selectedChampionship);
+    setSelectedChampionship(selectedChampionship);
     setHistoricoTab('geral');
     setExpandedEquipes([]);
     
     try {
-      // Buscar equipes
-      const { data: eq } = await supabase.from('equipes').select('*').eq('campeonato_id', campeonato.id);
+      const { data: eq } = await supabase.from('equipes').select('*').eq('championship_id', selectedChampionship.id);
       setEquipesCampeonato(eq || []);
       
-      // Buscar atletas
       const eqNames = (eq || []).map(e => e.nome);
       const { data: at } = await supabase.from('atletas').select('*').in('equipe_nome', eqNames.length ? eqNames : ['_NONE_']);
       setAtletasCampeonato(at || []);
 
-      // Buscar jogos
-      const { data: jg } = await supabase.from('jogos').select('*').eq('campeonato_id', campeonato.id);
+      const { data: jg } = await supabase.from('jogos').select('*').eq('championship_id', selectedChampionship.id);
       setJogosCampeonato((jg || []).filter(j => j.status === 'Encerrado' || j.status === 'W.O'));
       
       setDetalhesModalOpen(true);
@@ -230,6 +240,7 @@ export default function Campeonatos() {
     }
   };
 
+<<<<<<< HEAD
   const proclamarCampeao = async (equipeNome: string, posicao: string) => {
     if (!campeonatoSelecionado) return;
     const key = `${equipeNome}-${posicao}`;
@@ -263,6 +274,62 @@ export default function Campeonatos() {
       toast.error('Erro ao proclamar: ' + err.message);
     } finally {
       setProclamando(null);
+=======
+  const fetchGaleria = async () => {
+    if (!selectedChampionship) return;
+    setLoadingGaleria(true);
+    try {
+      const { data, error } = await supabase
+        .from('galeria_campeoes')
+        .select('*')
+        .eq('championship_id', selectedChampionship.id)
+        .order('criado_em', { ascending: false });
+      if (error) throw error;
+      setGaleriaFotos(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar galeria:', err);
+    } finally {
+      setLoadingGaleria(false);
+    }
+  };
+
+  const handleSalvarFoto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedChampionship) return;
+    try {
+      const { error } = await supabase.from('galeria_campeoes').insert([{
+        championship_id: selectedChampionship.id,
+        titulo: novaFoto.titulo,
+        url: novaFoto.url
+      }]);
+      if (error) throw error;
+      toast.success('Foto adicionada com sucesso!');
+      setNovaFoto({ titulo: '', url: '' });
+      fetchGaleria();
+    } catch (err) {
+      console.error('Erro ao salvar foto:', err);
+      toast.error('Erro ao adicionar foto.');
+    }
+  };
+
+  const handleExcluirFoto = async (id: string) => {
+    if (!confirm('Deseja excluir esta foto?')) return;
+    try {
+      const { error } = await supabase.from('galeria_campeoes').delete().eq('id', id);
+      if (error) throw error;
+      toast.success('Foto excluída!');
+      fetchGaleria();
+    } catch (err) {
+      console.error('Erro ao excluir foto:', err);
+      toast.error('Erro ao excluir foto.');
+    }
+  };
+
+  const handleTabChange = (tab: 'geral' | 'elencos' | 'galeria') => {
+    setHistoricoTab(tab);
+    if (tab === 'galeria') {
+      fetchGaleria();
+>>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
     }
   };
 
@@ -465,10 +532,17 @@ export default function Campeonatos() {
 
       <Modal isOpen={isDetalhesModalOpen} onClose={() => setDetalhesModalOpen(false)} title={`Histórico: ${campeonatoSelecionado?.nome}`} maxWidth="max-w-5xl">
         <div className="space-y-6 flex flex-col h-full">
+<<<<<<< HEAD
           <div className="flex border-b border-slate-200 overflow-x-auto">
             <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('geral')}>Visão Geral & Tabela</button>
             <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('elencos')}>Elencos Oficiais</button>
             <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${historicoTab === 'proclamar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`} onClick={() => setHistoricoTab('proclamar')}><Crown className="w-4 h-4" /> Proclamar Campeões</button>
+=======
+          <div className="flex border-b border-slate-200">
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'geral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('geral')}>Visão Geral & Tabela</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'elencos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('elencos')}>Elencos Oficiais</button>
+            <button type="button" className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${historicoTab === 'galeria' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`} onClick={() => handleTabChange('galeria')}><span className="flex items-center gap-2"><Award className="h-4 w-4" />Galeria dos Campeões</span></button>
+>>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
           </div>
           {historicoTab === 'geral' && (
             <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar">
@@ -543,6 +617,7 @@ export default function Campeonatos() {
                 })}
             </div>
           )}
+<<<<<<< HEAD
           {historicoTab === 'proclamar' && (
             <div className="space-y-4">
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
@@ -587,6 +662,52 @@ export default function Campeonatos() {
                       </div>
                     );
                   })}
+=======
+          {historicoTab === 'galeria' && (
+            <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2"><Award className="h-5 w-5 text-amber-500" /> Galeria dos Campeões</h3>
+                <span className="text-sm text-slate-500">{galeriaFotos.length} fotos</span>
+              </div>
+
+              <form onSubmit={handleSalvarFoto} className="flex flex-col sm:flex-row gap-2 sm:items-end bg-slate-50 p-3 rounded-lg border border-slate-200 shadow-sm mb-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Título da Foto</label>
+                  <input required type="text" value={novaFoto.titulo} onChange={(e) => setNovaFoto({...novaFoto, titulo: e.target.value})} className="block w-full rounded-md border-slate-300 py-1.5 px-3 border shadow-sm text-sm" placeholder="Ex: Campeões 2025" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">URL da Imagem</label>
+                  <input required type="url" value={novaFoto.url} onChange={(e) => setNovaFoto({...novaFoto, url: e.target.value})} className="block w-full rounded-md border-slate-300 py-1.5 px-3 border shadow-sm text-sm" placeholder="https://exemplo.com/foto.jpg" />
+                </div>
+                <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm font-medium sm:h-[34px] flex items-center justify-center gap-1 transition-colors">
+                  <Plus className="h-4 w-4" /> Adicionar
+                </button>
+              </form>
+              
+              {loadingGaleria ? (
+                <div className="text-center py-8"><p className="text-slate-500">Carregando fotos...</p></div>
+              ) : galeriaFotos.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                  <ImageIcon className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 font-medium">Nenhuma foto na galeria</p>
+                  <p className="text-sm text-slate-400 mt-1">Adicione fotos dos campeões deste campeonato</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {galeriaFotos.map((foto: any) => (
+                    <div key={foto.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                      {foto.url ? (
+                        <img src={foto.url} alt={foto.titulo || 'Foto'} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex items-center justify-center h-full"><ImageIcon className="h-8 w-8 text-slate-300" /></div>
+                      )}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button type="button" onClick={() => handleExcluirFoto(foto.id)} className="p-2 bg-white rounded-full text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                      {foto.titulo && <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2"><p className="text-white text-xs font-medium truncate">{foto.titulo}</p></div>}
+                    </div>
+                  ))}
+>>>>>>> 73be27d497dca6bd238d8d2b06a9f3d0648631b9
                 </div>
               )}
             </div>
