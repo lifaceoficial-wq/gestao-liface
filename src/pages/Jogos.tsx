@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, ShieldAlert, Trophy, PlayCircle, Clock, CheckCircle, XCircle, Calendar as CalendarIcon, Pencil, FileText } from 'lucide-react';
+import { Plus, Search, ShieldAlert, Trophy, PlayCircle, Clock, CheckCircle, XCircle, Calendar as CalendarIcon, Pencil, FileText, Trash2 } from 'lucide-react';
 import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -309,6 +309,24 @@ export default function Jogos() {
     }
   };
 
+  const excluirJogo = async (jogo: any) => {
+    if (!confirm(`Excluir permanentemente o jogo ${jogo.equipe_a_nome} x ${jogo.equipe_b_nome}? Esta ação não pode ser desfeita.`)) return;
+
+    const loadingToast = toast.loading('Excluindo jogo...');
+    try {
+      const { error: eventosErr } = await supabase.from('eventos_jogo').delete().eq('jogo_id', jogo.id);
+      if (eventosErr) throw eventosErr;
+
+      const { error } = await supabase.from('jogos').delete().eq('id', jogo.id);
+      if (error) throw error;
+
+      toast.success('Jogo excluído com sucesso!', { id: loadingToast });
+      fetchData();
+    } catch (err: any) {
+      toast.error('Erro ao excluir: ' + err.message, { id: loadingToast });
+    }
+  };
+
   const aplicarWO = async (jogo: any, timeVencedorNome: string) => {
     if(!confirm(`Aplicar W.O com vitória para ${timeVencedorNome}? O outro time será punido no financeiro.`)) return;
 
@@ -536,6 +554,9 @@ export default function Jogos() {
                       </button>
                       <button onClick={() => aplicarWO(jogo, jogo.equipe_a_nome)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipe_a_nome}</button>
                       <button onClick={() => aplicarWO(jogo, jogo.equipe_b_nome)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200">W.O {jogo.equipe_b_nome}</button>
+                      <button onClick={() => excluirJogo(jogo)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200 flex items-center gap-1" title="Excluir Jogo">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </>
                   )}
                   {jogo.status === 'Encerrado' && (
@@ -550,6 +571,9 @@ export default function Jogos() {
                       </button>
                       <button onClick={() => abrirEditarJogo(jogo)} className="px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 flex items-center gap-1">
                         <Pencil className="h-4 w-4" /> Editar
+                      </button>
+                      <button onClick={() => excluirJogo(jogo)} className="px-3 py-2 text-sm font-semibold text-rose-700 bg-rose-100 rounded-md hover:bg-rose-200 flex items-center gap-1">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </>
                   )}
@@ -653,9 +677,14 @@ export default function Jogos() {
               <input disabled value={editData.equipe_b_nome} className="mt-1 block w-full rounded-md border-slate-300 bg-slate-100 py-2 px-3 border shadow-sm text-slate-500" />
             </div>
           </div>
-          <div className="pt-4 flex justify-end gap-3">
-            <button type="button" onClick={() => setEditModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300">Cancelar</button>
-            <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Salvar Alterações</button>
+          <div className="pt-4 flex justify-between border-t border-slate-100">
+            <button type="button" onClick={() => { setEditModalOpen(false); excluirJogo(jogoEditando); }} className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100 flex items-center gap-1">
+              <Trash2 className="h-4 w-4" /> Excluir Jogo
+            </button>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setEditModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300">Cancelar</button>
+              <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Salvar Alterações</button>
+            </div>
           </div>
         </form>
       </Modal>
