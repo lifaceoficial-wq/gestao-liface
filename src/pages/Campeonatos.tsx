@@ -444,6 +444,38 @@ export default function Campeonatos() {
             <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
             <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Incluir Equipes Já Cadastradas</label>
+            <div className="border border-slate-200 rounded-md max-h-48 overflow-y-auto bg-slate-50 p-2">
+              {equipesDisponiveis.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">Nenhuma equipe cadastrada</p>
+              ) : (
+                <div className="space-y-1">
+                  {equipesDisponiveis.map((eq: any) => (
+                    <label key={eq.id} className="flex items-center gap-2 p-2 rounded hover:bg-white cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.equipesSelecionadas.includes(eq.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({...formData, equipesSelecionadas: [...formData.equipesSelecionadas, eq.id]});
+                          } else {
+                            setFormData({...formData, equipesSelecionadas: formData.equipesSelecionadas.filter((id: string) => id !== eq.id)});
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700">{eq.nome}</span>
+                      {eq.responsavel && <span className="text-xs text-slate-400">({eq.responsavel})</span>}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            {formData.equipesSelecionadas.length > 0 && (
+              <p className="text-xs text-blue-600 mt-1">{formData.equipesSelecionadas.length} equipe(s) selecionada(s) - atletas serão vinculados automaticamente</p>
+            )}
+          </div>
           <div className="pt-4 flex justify-end space-x-3 border-t border-slate-100 mt-6">
             <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold border hover:bg-slate-50">Cancelar</button>
             <button type="submit" className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500">Salvar</button>
@@ -453,7 +485,7 @@ export default function Campeonatos() {
 
       <Modal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} title="Editar Campeonato">
         <form onSubmit={handleEditar} className="space-y-4">
-           <div><label className="block text-sm font-medium text-slate-700">Nome</label><input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
+          <div><label className="block text-sm font-medium text-slate-700">Nome</label><input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-slate-700">Categoria</label><select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Adulto</option><option>Aspirante</option><option>Sub-20</option><option>Veterano</option><option>Feminino</option></select></div>
             <div><label className="block text-sm font-medium text-slate-700">Edição (Ano)</label><input required type="text" value={formData.edicao} onChange={e => setFormData({...formData, edicao: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
@@ -462,6 +494,38 @@ export default function Campeonatos() {
             <div><label className="block text-sm font-medium text-slate-700">Período</label><input required type="text" value={formData.periodo} onChange={e => setFormData({...formData, periodo: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm" /></div>
             <div><label className="block text-sm font-bold text-blue-700">Taxa (R$)</label><input required type="number" value={formData.taxaInscricao} onChange={e => setFormData({...formData, taxaInscricao: Number(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm bg-blue-50" /></div>
             <div><label className="block text-sm font-medium text-slate-700">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm"><option>Ativo</option><option>Em Breve</option><option>Encerrado</option></select></div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Equipes do Campeonato</label>
+            <div className="border border-slate-200 rounded-md max-h-48 overflow-y-auto bg-slate-50 p-2">
+              {equipesDisponiveis.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">Nenhuma equipe cadastrada</p>
+              ) : (
+                <div className="space-y-1">
+                  {equipesDisponiveis.map((eq: any) => (
+                    <label key={eq.id} className="flex items-center gap-2 p-2 rounded hover:bg-white cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.equipesSelecionadas.includes(eq.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({...formData, equipesSelecionadas: [...formData.equipesSelecionadas, eq.id]});
+                          } else {
+                            setFormData({...formData, equipesSelecionadas: formData.equipesSelecionadas.filter((id: string) => id !== eq.id)});
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700">{eq.nome}</span>
+                      {eq.responsavel && <span className="text-xs text-slate-400">({eq.responsavel})</span>}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            {formData.equipesSelecionadas.length > 0 && (
+              <p className="text-xs text-blue-600 mt-1">{formData.equipesSelecionadas.length} equipe(s) selecionada(s)</p>
+            )}
           </div>
           <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-6">
             <button type="button" onClick={excluirCampeonato} className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100">Excluir</button>
