@@ -82,30 +82,19 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           ))}
         </nav>
       </div>
-      <div className="flex shrink-0 flex-col border-t border-slate-800 p-4 gap-3">
-        <div className="flex items-center">
-          <div>
-            <img
-              className="inline-block h-9 w-9 rounded-full"
-              src="https://picsum.photos/seed/admin/100/100"
-              alt=""
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div className="ml-3 overflow-hidden">
-            <p className="text-sm font-medium text-white">Admin LIFACE</p>
-            <p className="text-xs font-medium text-slate-400 truncate" title={user?.email}>
-              {user?.email || 'administrador'}
-            </p>
-          </div>
+      <div className="shrink-0 border-t border-slate-800 p-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-400 truncate flex-1" title={user?.email}>
+            {user?.email || 'admin'}
+          </p>
+          <button
+            onClick={handleSignOut}
+            className="ml-2 p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-red-600/10 transition-colors"
+            title="Sair"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
-        <button
-          onClick={handleSignOut}
-          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-red-600/20 hover:text-red-400 transition-colors"
-        >
-          <LogOut className="h-4 w-4" />
-          Sair do Sistema
-        </button>
       </div>
     </div>
   );
