@@ -14,7 +14,7 @@ function cn(...inputs: ClassValue[]) {
 
 const menuItems = [
   { name: 'Painel', href: '/dashboard', icon: LayoutDashboard, color: 'text-slate-600' },
-  { name: 'Campeonatos', href: '/campeonato', icon: Trophy, color: 'text-amber-500' },
+  { name: 'Campeonatos', href: '/campeonatos', icon: Trophy, color: 'text-amber-500' },
   { name: 'Jogos', href: '/jogos', icon: PlayCircle, color: 'text-emerald-500' },
   { name: 'Equipes', href: '/equipes', icon: Users, color: 'text-blue-500' },
   { name: 'Atletas', href: '/atletas', icon: User, color: 'text-indigo-500' },
