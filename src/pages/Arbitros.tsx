@@ -4,6 +4,7 @@ import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import { formatarTelefone } from '../utils/formatters';
 
 // Mock data base fallback caso o usuário não tenha nada no localStorage
 const INITIAL_MOCK_DATA = Array.from({ length: 12 }, (_, i) => ({
@@ -32,7 +33,7 @@ export default function Arbitros() {
   const [arbitroSelecionado, setArbitroSelecionado] = useState<any>(null);
 
   // Estados do formulário de criação/edição
-  const [formData, setFormData] = useState({ nome: '', funcao: 'Árbitro Principal', contato: '' });
+  const [formData, setFormData] = useState({ nome: '', funcao: 'Árbitro Principal', telefone: '' });
 
   useEffect(() => {
     fetchArbitros();
@@ -68,8 +69,7 @@ export default function Arbitros() {
       const { data, error } = await supabase.from('arbitros').insert([{
         nome: formData.nome,
         funcao: formData.funcao,
-        contato: formData.contato,
-        avaliacao: '0.0', // fallback se não for tabela que tem avaliação fixa
+        telefone: formData.telefone,
         status: 'Ativo'
       }]).select();
 
@@ -79,9 +79,9 @@ export default function Arbitros() {
       setFormModalOpen(false);
       resetForm();
       toast.success('Árbitro cadastrado!');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Erro ao salvar árbitro');
+      toast.error('Erro ao salvar árbitro: ' + (err.message || err.toString()));
     }
   };
 
@@ -91,7 +91,7 @@ export default function Arbitros() {
       const { data, error } = await supabase.from('arbitros').update({
         nome: formData.nome,
         funcao: formData.funcao,
-        contato: formData.contato
+        telefone: formData.telefone
       }).eq('id', arbitroSelecionado.id).select();
 
       if (error) throw error;
@@ -109,7 +109,7 @@ export default function Arbitros() {
   };
 
   const resetForm = () => {
-    setFormData({ nome: '', funcao: 'Árbitro Principal', contato: '' });
+    setFormData({ nome: '', funcao: 'Árbitro Principal', telefone: '' });
     setArbitroSelecionado(null);
   }
 
@@ -122,7 +122,7 @@ export default function Arbitros() {
     setFormData({
       nome: arbitroSelecionado.nome,
       funcao: arbitroSelecionado.funcao,
-      contato: arbitroSelecionado.contato
+      telefone: arbitroSelecionado.telefone
     });
     setProfileModalOpen(false);
     setEditModalOpen(true);
@@ -229,7 +229,7 @@ export default function Arbitros() {
                 </div>
               </div>
               <div className="mt-4 flex-1">
-                <p className="text-sm text-slate-600">Contato: {arbitro.contato}</p>
+                <p className="text-sm text-slate-600">Telefone: {arbitro.telefone || '-'}</p>
               </div>
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
                 <div className="flex items-center">
@@ -288,12 +288,12 @@ export default function Arbitros() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700">Contato</label>
+            <label className="block text-sm font-medium text-slate-700">Telefone</label>
             <input 
               required
               type="text" 
-              value={formData.contato}
-              onChange={e => setFormData({...formData, contato: e.target.value})}
+              value={formData.telefone}
+              onChange={e => setFormData({...formData, telefone: formatarTelefone(e.target.value)})}
               className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               placeholder="Ex: (85) 99999-9999" 
             />
@@ -319,8 +319,8 @@ export default function Arbitros() {
             
             <div className="bg-slate-50 p-4 rounded-lg space-y-3 border border-slate-100">
               <div className="flex justify-between">
-                <span className="text-slate-500">Contato:</span>
-                <span className="font-medium text-slate-900">{arbitroSelecionado.contato}</span>
+                <span className="text-slate-500">Telefone:</span>
+                <span className="font-medium text-slate-900">{arbitroSelecionado.telefone || '-'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500">Avaliação Geral:</span>
@@ -383,12 +383,12 @@ export default function Arbitros() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700">Contato</label>
+            <label className="block text-sm font-medium text-slate-700">Telefone</label>
             <input 
               required
               type="text" 
-              value={formData.contato}
-              onChange={e => setFormData({...formData, contato: e.target.value})}
+              value={formData.telefone}
+              onChange={e => setFormData({...formData, telefone: formatarTelefone(e.target.value)})}
               className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
           </div>

@@ -4,6 +4,7 @@ import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import { formatarTelefone } from '../utils/formatters';
 
 const formatCPF = (value: string) => {
   return value
@@ -464,7 +465,7 @@ export default function Equipes() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">Contato / WhatsApp</label>
-              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" placeholder="(85) 90000-0000" />
+              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: formatarTelefone(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" placeholder="(85) 90000-0000" />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 bg-blue-50/50 p-4 rounded-lg border border-blue-100 mt-2">
@@ -572,7 +573,7 @@ export default function Equipes() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">Contato / WhatsApp</label>
-              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" />
+              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: formatarTelefone(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 bg-blue-50/50 p-4 rounded-lg border border-blue-100 mt-2">

@@ -14,6 +14,7 @@ const INITIAL_MOCK_DATA = Array.from({ length: 5 }, (_, i) => ({
 }));
 
 import { supabase } from '../lib/supabase';
+import { formatarTelefone } from '../utils/formatters';
 
 export default function Diretoria() {
   const [diretoria, setDiretoria] = useState<any[]>([]);
@@ -272,7 +273,7 @@ export default function Diretoria() {
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-sm font-medium text-slate-700">Contato (Telefone/Email)</label>
-              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
+              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: formatarTelefone(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
             </div>
           </div>
           <div>
@@ -312,7 +313,7 @@ export default function Diretoria() {
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-sm font-medium text-slate-700">Contato</label>
-              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
+              <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: formatarTelefone(e.target.value)})} className="mt-1 block w-full rounded-md border-slate-300 py-2 px-3 border shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" />
             </div>
           </div>
           <div>
