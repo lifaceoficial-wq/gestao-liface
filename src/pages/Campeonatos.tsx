@@ -107,9 +107,12 @@ export default function Campeonatos() {
       if (error) throw error;
 
       if (novoCamp && formData.equipesSelecionadas.length > 0) {
-        await supabase.from('equipes')
-          .update({ campeonato_id: novoCamp.id, campeonato_nome: novoCamp.nome })
-          .in('id', formData.equipesSelecionadas);
+        const eqCamps = formData.equipesSelecionadas.map(eqId => ({
+          equipe_id: eqId,
+          campeonato_id: novoCamp.id,
+          campeonato_nome: novoCamp.nome
+        }));
+        await supabase.from('equipe_campeonatos').insert(eqCamps);
       }
 
       toast.success('Campeonato criado com sucesso!');
@@ -136,14 +139,17 @@ export default function Campeonatos() {
       }).eq('id', campeonatoSelecionado.id);
       if (error) throw error;
 
-      await supabase.from('equipes')
-        .update({ campeonato_id: null, campeonato_nome: null })
+      await supabase.from('equipe_campeonatos')
+        .delete()
         .eq('campeonato_id', campeonatoSelecionado.id);
         
       if (formData.equipesSelecionadas.length > 0) {
-        await supabase.from('equipes')
-          .update({ campeonato_id: campeonatoSelecionado.id, campeonato_nome: formData.nome })
-          .in('id', formData.equipesSelecionadas);
+        const eqCamps = formData.equipesSelecionadas.map(eqId => ({
+          equipe_id: eqId,
+          campeonato_id: campeonatoSelecionado.id,
+          campeonato_nome: formData.nome
+        }));
+        await supabase.from('equipe_campeonatos').insert(eqCamps);
       }
 
       toast.success('Campeonato atualizado com sucesso!');
@@ -199,9 +205,9 @@ export default function Campeonatos() {
     });
     setEditModalOpen(true);
     
-    const { data: eqs } = await supabase.from('equipes').select('id').eq('campeonato_id', campeonato.id);
-    if (eqs) {
-      setFormData(prev => ({ ...prev, equipesSelecionadas: eqs.map(e => e.id) }));
+    const { data: ec } = await supabase.from('equipe_campeonatos').select('equipe_id').eq('campeonato_id', campeonato.id);
+    if (ec) {
+      setFormData(prev => ({ ...prev, equipesSelecionadas: ec.map(e => e.equipe_id) }));
     }
   };
 
@@ -212,7 +218,10 @@ export default function Campeonatos() {
     setExpandedEquipes([]);
     
     try {
-      const { data: eq } = await supabase.from('equipes').select('*').eq('championship_id', champ.id);
+      const { data: ec } = await supabase.from('equipe_campeonatos').select('equipe_id').eq('campeonato_id', champ.id);
+      const equipeIds = (ec || []).map(e => e.equipe_id);
+      
+      const { data: eq } = await supabase.from('equipes').select('*').in('id', equipeIds.length ? equipeIds : ['00000000-0000-0000-0000-000000000000']);
       setEquipesCampeonato(eq || []);
       
       const eqNames = (eq || []).map(e => e.nome);

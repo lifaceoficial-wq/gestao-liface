@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, HeartHandshake, Users, Target, Edit2, Trash2 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
+import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 const INITIAL_MOCK_DATA = Array.from({ length: 6 }, (_, i) => ({
   id: Date.now() - i * 1000,
@@ -14,11 +16,8 @@ const INITIAL_MOCK_DATA = Array.from({ length: 6 }, (_, i) => ({
 }));
 
 export default function Social() {
-  const [projetos, setProjetos] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:social');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [projetos, setProjetos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState('Todos');
@@ -41,8 +40,22 @@ export default function Social() {
   });
 
   useEffect(() => {
-    localStorage.setItem('@nicolau:social', JSON.stringify(projetos));
-  }, [projetos]);
+    fetchProjetos();
+  }, []);
+
+  const fetchProjetos = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from('projetos_sociais').select('*').order('criado_em', { ascending: false });
+      if (error) throw error;
+      setProjetos(data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar projetos sociais');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredItems = projetos.filter((p: any) => {
     const matchSearch = p.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -64,22 +77,52 @@ export default function Social() {
   const realizadosCount = projetos.filter((p: any) => p.status === 'Concluído').length;
   const beneficiadosTotal = projetos.reduce((acc: number, p: any) => acc + (Number(p.beneficiados) || 0), 0);
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const novo = {
-      id: Date.now(),
-      ...formData
-    };
-    setProjetos([novo, ...projetos]);
-    setFormModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('projetos_sociais').insert([{
+        nome: formData.nome,
+        tipo: formData.tipo,
+        publico: formData.publico,
+        beneficiados: formData.beneficiados,
+        local: formData.local,
+        status: formData.status
+      }]).select();
+
+      if (error) throw error;
+      
+      setProjetos([data[0], ...projetos]);
+      setFormModalOpen(false);
+      resetForm();
+      toast.success('Iniciativa salva!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar iniciativa');
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProjetos(projetos.map((p: any) => p.id === itemSelecionado.id ? { ...p, ...formData } : p));
-    setEditModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('projetos_sociais').update({
+        nome: formData.nome,
+        tipo: formData.tipo,
+        publico: formData.publico,
+        beneficiados: formData.beneficiados,
+        local: formData.local,
+        status: formData.status
+      }).eq('id', itemSelecionado.id).select();
+
+      if (error) throw error;
+
+      setProjetos(projetos.map((p: any) => p.id === itemSelecionado.id ? data[0] : p));
+      setEditModalOpen(false);
+      resetForm();
+      toast.success('Iniciativa atualizada!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar iniciativa');
+    }
   };
 
   const resetForm = () => {
@@ -119,11 +162,20 @@ export default function Social() {
     setEditModalOpen(true);
   };
 
-  const excluirItem = () => {
+  const excluirItem = async () => {
     if (confirm('Tem certeza que deseja apagar este projeto/ação?')) {
-      setProjetos(projetos.filter((p: any) => p.id !== itemSelecionado.id));
-      setEditModalOpen(false);
-      resetForm();
+      try {
+        const { error } = await supabase.from('projetos_sociais').delete().eq('id', itemSelecionado.id);
+        if (error) throw error;
+
+        setProjetos(projetos.filter((p: any) => p.id !== itemSelecionado.id));
+        setEditModalOpen(false);
+        resetForm();
+        toast.success('Iniciativa removida!');
+      } catch (err) {
+        console.error(err);
+        toast.error('Erro ao remover iniciativa');
+      }
     }
   };
 
@@ -224,7 +276,11 @@ export default function Social() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[60vh]">
-        {filteredItems.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center p-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="text-center p-12">
             <p className="text-slate-500">Nenhum projeto social encontrado.</p>
           </div>

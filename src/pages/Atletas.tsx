@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
@@ -85,10 +86,16 @@ export default function Atletas() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch equipes
+      // Fetch equipes e equipe_campeonatos
       const { data: eqs, error: eqError } = await supabase.from('equipes').select('*').order('nome');
+      const { data: ec } = await supabase.from('equipe_campeonatos').select('*');
       if (eqError) throw eqError;
-      setEquipesCadastradas(eqs || []);
+      
+      const eqsWithCamps = (eqs || []).map(e => ({
+        ...e,
+        campeonatos_ativos: (ec || []).filter(c => c.equipe_id === e.id).map(c => c.campeonato_nome)
+      }));
+      setEquipesCadastradas(eqsWithCamps);
 
       // Fetch atletas
       const { data: ats, error: atError } = await supabase.from('atletas').select('*').order('nome');
@@ -113,6 +120,8 @@ export default function Atletas() {
     a.equipe?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalItems = filteredItems.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const criarCobrancaCarteirinha = async (atletaNome: string, equipeNome: string, valor: number) => {
@@ -137,7 +146,7 @@ export default function Atletas() {
       ...formData, 
       equipe_id: infoEquipe.id,
       equipe_nome: infoEquipe.nome,
-      campeonato_heranca: infoEquipe.campeonato_nome || '' 
+      campeonato_heranca: infoEquipe.campeonatos_ativos ? infoEquipe.campeonatos_ativos.join(', ') : '' 
     });
   };
 
@@ -340,6 +349,18 @@ export default function Atletas() {
           </table>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+          />
+        </div>
+      )}
 
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Cadastrar Atleta Oficial">
         <form onSubmit={handleSalvar} className="space-y-4">

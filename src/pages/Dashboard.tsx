@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Trophy, Users, AlertTriangle, DollarSign, MapPin, Calendar, Clock, ArrowRight } from 'lucide-react';
+import { Trophy, Users, User, AlertTriangle, DollarSign, MapPin, Calendar, Clock, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
   const [campeonatosCount, setCampeonatosCount] = useState(0);
   const [equipesCount, setEquipesCount] = useState(0);
+  const [atletasCadastradosCount, setAtletasCadastradosCount] = useState(0);
   const [suspensoesCount, setSuspensoesCount] = useState(0);
   const [pendenciasTotal, setPendenciasTotal] = useState(0);
   const [jogosFuturos, setJogosFuturos] = useState<any[]>([]);
@@ -33,18 +34,24 @@ export default function Dashboard() {
         .select('*', { count: 'exact', head: true });
       setEquipesCount(eqCount || 0);
 
-      // 3. Suspensões Ativas
+      // 3. Atletas Cadastrados
+      const { count: atletasCount } = await supabase
+        .from('atletas')
+        .select('*', { count: 'exact', head: true });
+      setAtletasCadastradosCount(atletasCount || 0);
+
+      // 4. Atletas Suspensos
       const { count: suspCount } = await supabase
-        .from('suspensoes')
+        .from('atletas')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'Suspenso');
       setSuspensoesCount(suspCount || 0);
 
-      // 4. Pendências Financeiras
+      // 5. Pendências Financeiras
       const { data: finData } = await supabase
         .from('financeiro')
-        .select('valor')
-        .eq('status', 'Pendente');
+        .select('valor, status')
+        .in('status', ['Pendente', 'Atrasado', 'Debito Bloqueador']);
       
       const totalPendente = (finData || []).reduce((acc, curr) => acc + Number(curr.valor), 0);
       setPendenciasTotal(totalPendente);
@@ -93,7 +100,7 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Painel Inicial</h1>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {/* Stats Cards */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center">
@@ -118,6 +125,20 @@ export default function Dashboard() {
               <p className="text-sm font-medium text-slate-500">Equipes Cadastradas</p>
               <p className="text-2xl font-semibold text-slate-900">
                 {loading ? '...' : equipesCount}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center">
+            <div className="rounded-md bg-indigo-50 p-3">
+              <User className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-slate-500">Atletas Cadastrados</p>
+              <p className="text-2xl font-semibold text-slate-900">
+                {loading ? '...' : atletasCadastradosCount}
               </p>
             </div>
           </div>

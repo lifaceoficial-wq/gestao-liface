@@ -45,8 +45,8 @@ export default function Diretoria() {
       .order('id', { ascending: false });
       
     if (error) {
-      toast.error('Erro ao carregar diretoria do Supabase');
-      console.error(error);
+      toast.error('Erro ao carregar diretoria do Supabase: ' + error.message);
+      console.error('Supabase Error:', error);
     } else if (data) {
       setDiretoria(data);
     }
@@ -74,8 +74,8 @@ export default function Diretoria() {
       .select();
 
     if (error) {
-      console.error(error);
-      toast.error('Erro ao salvar integrante');
+      console.error('Supabase Error:', error);
+      toast.error('Erro ao salvar integrante: ' + error.message);
     } else if (data) {
       setDiretoria([data[0], ...diretoria]);
       setFormModalOpen(false);

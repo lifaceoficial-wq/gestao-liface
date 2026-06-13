@@ -3,6 +3,7 @@ import { Plus, Search, Filter, Calendar as CalendarIcon, Edit2, Trash2 } from 'l
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 const INITIAL_MOCK_DATA = Array.from({ length: 6 }, (_, i) => ({
   id: Date.now() - i * 1000,
@@ -16,11 +17,8 @@ const INITIAL_MOCK_DATA = Array.from({ length: 6 }, (_, i) => ({
 }));
 
 export default function Eventos() {
-  const [eventos, setEventos] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:eventos');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [eventos, setEventos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState('Todos os Tipos');
@@ -43,8 +41,22 @@ export default function Eventos() {
   });
 
   useEffect(() => {
-    localStorage.setItem('@nicolau:eventos', JSON.stringify(eventos));
-  }, [eventos]);
+    fetchEventos();
+  }, []);
+
+  const fetchEventos = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from('eventos').select('*').order('criado_em', { ascending: false });
+      if (error) throw error;
+      setEventos(data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar eventos');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredItems = eventos.filter((e: any) => {
     const matchSearch = e.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -61,22 +73,54 @@ export default function Eventos() {
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const novo = {
-      id: Date.now(),
-      ...formData
-    };
-    setEventos([novo, ...eventos]);
-    setFormModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('eventos').insert([{
+        nome: formData.nome,
+        tipo: formData.tipo,
+        instituicao: formData.instituicao || null,
+        data: formData.data,
+        local: formData.local,
+        categoria: formData.categoria,
+        status: formData.status
+      }]).select();
+
+      if (error) throw error;
+      
+      setEventos([data[0], ...eventos]);
+      setFormModalOpen(false);
+      resetForm();
+      toast.success('Evento cadastrado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar evento');
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEventos(eventos.map((ev: any) => ev.id === eventoSelecionado.id ? { ...ev, ...formData } : ev));
-    setEditModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('eventos').update({
+        nome: formData.nome,
+        tipo: formData.tipo,
+        instituicao: formData.instituicao || null,
+        data: formData.data,
+        local: formData.local,
+        categoria: formData.categoria,
+        status: formData.status
+      }).eq('id', eventoSelecionado.id).select();
+
+      if (error) throw error;
+
+      setEventos(eventos.map((ev: any) => ev.id === eventoSelecionado.id ? data[0] : ev));
+      setEditModalOpen(false);
+      resetForm();
+      toast.success('Evento atualizado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar evento');
+    }
   };
 
   const resetForm = () => {
@@ -106,11 +150,20 @@ export default function Eventos() {
     setEditModalOpen(true);
   };
 
-  const excluirEvento = () => {
+  const excluirEvento = async () => {
     if (confirm('Atenção: Tem certeza que deseja excluir permanentemente este evento/festa?')) {
-      setEventos(eventos.filter((ev: any) => ev.id !== eventoSelecionado.id));
-      setEditModalOpen(false);
-      resetForm();
+      try {
+        const { error } = await supabase.from('eventos').delete().eq('id', eventoSelecionado.id);
+        if (error) throw error;
+
+        setEventos(eventos.filter((ev: any) => ev.id !== eventoSelecionado.id));
+        setEditModalOpen(false);
+        resetForm();
+        toast.success('Evento removido!');
+      } catch (err) {
+        console.error(err);
+        toast.error('Erro ao remover evento');
+      }
     }
   };
 
@@ -166,7 +219,11 @@ export default function Eventos() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredItems.length === 0 ? (
+        {loading ? (
+          <div className="col-span-full flex justify-center p-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="col-span-full text-center p-12 bg-white rounded-xl border border-slate-200">
             <p className="text-slate-500">Nenhum evento localizado com estes filtros.</p>
           </div>

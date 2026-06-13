@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, UserPlus, X, Users } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
@@ -50,9 +51,7 @@ export default function Equipes() {
     fantasia: '',
     responsavel: '',
     contato: '',
-    campeonato_id: '',
-    campeonato_nome: '',
-    taxaInscricao: 500,
+    campeonatos_selecionados: [] as any[],
     status: 'Regular'
   });
 
@@ -85,10 +84,18 @@ export default function Equipes() {
       const { data: eqs, error: eqError } = await supabase.from('equipes').select('*').order('nome');
       if (eqError) throw eqError;
       
-      const formattedEqs = (eqs || []).map(e => ({
-        ...e,
-        campeonato: e.campeonato_nome
-      }));
+      // 3. Fetch equipe_campeonatos
+      const { data: ec, error: ecError } = await supabase.from('equipe_campeonatos').select('*');
+      if (ecError) throw ecError;
+
+      const formattedEqs = (eqs || []).map(e => {
+        const camps = (ec || []).filter(c => c.equipe_id === e.id);
+        return {
+          ...e,
+          campeonato: camps.length > 0 ? camps.map(c => c.campeonato_nome).join(', ') : 'Nenhum',
+          campeonatos_ativos: camps
+        };
+      });
       setEquipes(formattedEqs);
     } catch (error: any) {
       toast.error('Erro ao buscar equipes: ' + error.message);
@@ -115,6 +122,8 @@ export default function Equipes() {
     (e.fantasia && e.fantasia.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const totalItems = filteredItems.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const criarCobrancaAutomatica = async (equipeNome: string, campeonatoNome: string, valor: number) => {
@@ -132,15 +141,26 @@ export default function Equipes() {
     }
   };
 
-  const handleCampeonatoChange = (campId: string) => {
+  const toggleCampeonato = (campId: string) => {
     const infoCap = campeonatosAtivos.find(c => c.id === campId);
     if (!infoCap) return;
-    setFormData({ 
-      ...formData, 
-      campeonato_id: infoCap.id,
-      campeonato_nome: infoCap.nome,
-      taxaInscricao: Number(infoCap.taxa_inscricao || 500) 
-    });
+    
+    const jaSelecionado = formData.campeonatos_selecionados.find(c => c.id === campId);
+    if (jaSelecionado) {
+      setFormData({
+        ...formData,
+        campeonatos_selecionados: formData.campeonatos_selecionados.filter(c => c.id !== campId)
+      });
+    } else {
+      setFormData({
+        ...formData,
+        campeonatos_selecionados: [...formData.campeonatos_selecionados, {
+          id: infoCap.id,
+          nome: infoCap.nome,
+          taxa_inscricao: Number(infoCap.taxa_inscricao || 500)
+        }]
+      });
+    }
   };
 
   const processarAtletas = async (equipeId: string, equipeNome: string) => {
@@ -184,7 +204,7 @@ export default function Equipes() {
         posicao: 'Mapeado (Súmula)',
         equipe_id: equipeId,
         equipe_nome: equipeNome,
-        campeonato_heranca: formData.campeonato_nome,
+        campeonato_heranca: formData.campeonatos_selecionados.map(c => c.nome).join(', '),
         status: 'Regular',
         taxa_carteira: 15
       }));
@@ -205,9 +225,6 @@ export default function Equipes() {
         fantasia: formData.fantasia,
         responsavel: formData.responsavel,
         contato: formData.contato,
-        campeonato_id: formData.campeonato_id || null,
-        campeonato_nome: formData.campeonato_nome || null,
-        taxa_inscricao: formData.taxaInscricao,
         status: formData.status
       };
 
@@ -215,6 +232,21 @@ export default function Equipes() {
       if (error) throw error;
 
       if (data && data[0]) {
+        // Salva os campeonatos associados
+        if (formData.campeonatos_selecionados.length > 0) {
+          const insertsEc = formData.campeonatos_selecionados.map(c => ({
+            equipe_id: data[0].id,
+            campeonato_id: c.id,
+            campeonato_nome: c.nome
+          }));
+          await supabase.from('equipe_campeonatos').insert(insertsEc);
+
+          // Gerar cobranca se vinculado campeonato
+          for (const camp of formData.campeonatos_selecionados) {
+            await criarCobrancaAutomatica(payload.nome, camp.nome, camp.taxa_inscricao);
+          }
+        }
+
         // Process Athletes - if false it means duplicate or invalid CPF
         const atlSucesso = await processarAtletas(data[0].id, data[0].nome);
         if (!atlSucesso) {
@@ -225,12 +257,7 @@ export default function Equipes() {
         }
 
         // Atualiza a grid
-        setEquipes([{...data[0], campeonato: data[0].campeonato_nome}, ...equipes]);
-
-        // Gerar cobranca se vinculado campeonato
-        if (payload.campeonato_id) {
-          await criarCobrancaAutomatica(payload.nome, payload.campeonato_nome!, payload.taxa_inscricao);
-        }
+        fetchData();
       }
 
       setFormModalOpen(false);
@@ -256,6 +283,18 @@ export default function Equipes() {
       const { error } = await supabase.from('equipes').update(payload).eq('id', equipeSelecionada.id);
       if (error) throw error;
       
+      // Atualiza os campeonatos
+      await supabase.from('equipe_campeonatos').delete().eq('equipe_id', equipeSelecionada.id);
+      
+      if (formData.campeonatos_selecionados.length > 0) {
+        const insertsEc = formData.campeonatos_selecionados.map(c => ({
+          equipe_id: equipeSelecionada.id,
+          campeonato_id: c.id,
+          campeonato_nome: c.nome
+        }));
+        await supabase.from('equipe_campeonatos').insert(insertsEc);
+      }
+
       // Salvar os novos atletas de elenco que o usuario registrou agora
       const atlSucesso = await processarAtletas(equipeSelecionada.id, formData.nome);
       if (!atlSucesso) {
@@ -264,7 +303,7 @@ export default function Equipes() {
         toast.success('Equipe atualizada com sucesso!', { id: loadingToast });
       }
 
-      setEquipes(equipes.map((eq: any) => eq.id === equipeSelecionada.id ? { ...eq, ...payload } : eq));
+      fetchData();
 
       setEditModalOpen(false);
       resetForm();
@@ -292,7 +331,7 @@ export default function Equipes() {
   };
 
   const resetForm = () => {
-    setFormData({ nome: '', fantasia: '', responsavel: '', contato: '', campeonato_id: '', campeonato_nome: '', taxaInscricao: 500, status: 'Regular' });
+    setFormData({ nome: '', fantasia: '', responsavel: '', contato: '', campeonatos_selecionados: [], status: 'Regular' });
     setEquipeSelecionada(null);
     setElencoForm([]);
   };
@@ -304,9 +343,11 @@ export default function Equipes() {
       fantasia: equipe.fantasia || '',
       responsavel: equipe.responsavel || '',
       contato: equipe.contato || '',
-      campeonato_id: equipe.campeonato_id || '',
-      campeonato_nome: equipe.campeonato_nome || '',
-      taxaInscricao: equipe.taxa_inscricao || 500,
+      campeonatos_selecionados: equipe.campeonatos_ativos ? equipe.campeonatos_ativos.map((c: any) => ({
+        id: c.campeonato_id,
+        nome: c.campeonato_nome,
+        taxa_inscricao: 0
+      })) : [],
       status: equipe.status || 'Regular'
     });
     
@@ -392,6 +433,18 @@ export default function Equipes() {
         )}
       </div>
 
+      {totalPages > 1 && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+          />
+        </div>
+      )}
+
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Cadastrar & Inscrever Nova Equipe">
         <form onSubmit={handleSalvar} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -414,20 +467,24 @@ export default function Equipes() {
               <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" placeholder="(85) 90000-0000" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 bg-blue-50/50 p-3 rounded-lg border border-blue-100 mt-2">
+          <div className="grid grid-cols-1 gap-4 bg-blue-50/50 p-4 rounded-lg border border-blue-100 mt-2">
             <div>
-              <label className="block text-sm font-bold text-blue-900">Vincular a Campeonato Ativo</label>
-              <select value={formData.campeonato_id} onChange={e => handleCampeonatoChange(e.target.value)} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm">
-                <option value="">Nenhum (Só Cadastrar)</option>
+              <label className="block text-sm font-bold text-blue-900 mb-2">Vincular a Campeonatos Ativos (Pode selecionar vários)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-2">
                 {campeonatosAtivos.map(camp => (
-                  <option key={camp.id} value={camp.id}>{camp.nome} ({camp.categoria})</option>
+                  <label key={camp.id} className="flex items-center space-x-2 bg-white p-2 rounded border border-slate-200 cursor-pointer hover:bg-slate-50">
+                    <input 
+                      type="checkbox" 
+                      checked={!!formData.campeonatos_selecionados.find(c => c.id === camp.id)}
+                      onChange={() => toggleCampeonato(camp.id)}
+                      className="rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">{camp.nome}</span>
+                  </label>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-blue-900">Taxa Inscrição Sincronizada (R$)</label>
-              <input type="number" disabled value={formData.campeonato_id ? formData.taxaInscricao : 0} className="mt-1 block w-full rounded-md border-slate-300 bg-slate-100 text-slate-500 border py-2 px-3 sm:text-sm" />
-              <p className="text-[10px] text-blue-700 mt-1">Lançamento automático no Financeiro.</p>
+                {campeonatosAtivos.length === 0 && <p className="text-xs text-slate-500">Nenhum campeonato ativo no momento.</p>}
+              </div>
+              <p className="text-[10px] text-blue-700 mt-2">Ao salvar a equipe nova, os lançamentos de taxa de inscrição serão gerados automaticamente no Financeiro para cada campeonato.</p>
             </div>
           </div>
           
@@ -518,15 +575,24 @@ export default function Equipes() {
               <input required type="text" value={formData.contato} onChange={e => setFormData({...formData, contato: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm" />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Status Vigente</label>
-            <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="mt-1 block w-full rounded-md border-slate-300 border py-2 px-3 sm:text-sm">
-                <option>Regular</option>
-                <option>Irregular</option>
-                <option>SuspensaRegras</option>
-            </select>
+          <div className="grid grid-cols-1 gap-4 bg-blue-50/50 p-4 rounded-lg border border-blue-100 mt-2">
+            <div>
+              <label className="block text-sm font-bold text-blue-900 mb-2">Vincular a Campeonatos Ativos (Pode selecionar vários)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-2">
+                {campeonatosAtivos.map(camp => (
+                  <label key={camp.id} className="flex items-center space-x-2 bg-white p-2 rounded border border-slate-200 cursor-pointer hover:bg-slate-50">
+                    <input 
+                      type="checkbox" 
+                      checked={!!formData.campeonatos_selecionados.find(c => c.id === camp.id)}
+                      onChange={() => toggleCampeonato(camp.id)}
+                      className="rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">{camp.nome}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
-          
           <div className="mt-6 pt-4 border-t border-slate-200">
             <div className="flex justify-between items-center mb-4">
               <label className="block text-sm font-bold text-slate-800 flex items-center gap-2">

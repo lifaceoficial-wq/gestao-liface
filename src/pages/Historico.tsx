@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, Trophy, Calendar, FileText, Plus, Edit2, Trash2 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
+import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 const INITIAL_MOCK_DATA = Array.from({ length: 6 }, (_, i) => ({
   id: Date.now() - i * 1000,
@@ -14,11 +16,8 @@ const INITIAL_MOCK_DATA = Array.from({ length: 6 }, (_, i) => ({
 }));
 
 export default function Historico() {
-  const [historico, setHistorico] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:historico');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [historico, setHistorico] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAno, setFilterAno] = useState('Todos os Anos');
@@ -41,12 +40,26 @@ export default function Historico() {
   });
 
   useEffect(() => {
-    localStorage.setItem('@nicolau:historico', JSON.stringify(historico));
-  }, [historico]);
+    fetchHistorico();
+  }, []);
 
-  const filteredItems = historico.filter((h: any) => {
-    const matchSearch = h.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        h.campeao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const fetchHistorico = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from('historico').select('*').order('criado_em', { ascending: false });
+      if (error) throw error;
+      setHistorico(data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar histórico');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredItems = historico.map((h: any) => ({...h, nome: h.nome || h.titulo})).filter((h: any) => {
+    const matchSearch = h.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        h.campeao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         h.vice.toLowerCase().includes(searchTerm.toLowerCase());
     const matchAno = filterAno === 'Todos os Anos' || h.ano === filterAno;
     return matchSearch && matchAno;
@@ -56,22 +69,58 @@ export default function Historico() {
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const novo = {
-      id: Date.now(),
-      ...formData
-    };
-    setHistorico([novo, ...historico]);
-    setFormModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('historico').insert([{
+        titulo: formData.nome, // 'nome' no state, 'titulo' na table schema
+        ano: parseInt(formData.ano) || new Date().getFullYear(),
+        categoria: formData.categoria,
+        campeao: formData.campeao,
+        vice: formData.vice,
+        artilheiro: formData.artilheiro,
+        tipo: 'campeonato', // fallback
+        data: new Date().toLocaleDateString('pt-BR')
+      }]).select();
+
+      if (error) throw error;
+      
+      // Mapear titulo de volta para nome no client side para compatibilidade ou atualizar componente
+      const novoRegistro = { ...data[0], nome: data[0].titulo };
+      
+      setHistorico([novoRegistro, ...historico]);
+      setFormModalOpen(false);
+      resetForm();
+      toast.success('Histórico salvo!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar histórico');
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setHistorico(historico.map((h: any) => h.id === registroSelecionado.id ? { ...h, ...formData } : h));
-    setEditModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('historico').update({
+        titulo: formData.nome,
+        ano: parseInt(formData.ano) || new Date().getFullYear(),
+        categoria: formData.categoria,
+        campeao: formData.campeao,
+        vice: formData.vice,
+        artilheiro: formData.artilheiro
+      }).eq('id', registroSelecionado.id).select();
+
+      if (error) throw error;
+
+      const atualizado = { ...data[0], nome: data[0].titulo };
+      setHistorico(historico.map((h: any) => h.id === registroSelecionado.id ? atualizado : h));
+      setEditModalOpen(false);
+      resetForm();
+      toast.success('Histórico atualizado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar histórico');
+    }
   };
 
   const resetForm = () => {
@@ -99,16 +148,25 @@ export default function Historico() {
     setEditModalOpen(true);
   };
 
-  const excluirRegistro = () => {
+  const excluirRegistro = async () => {
     if (confirm('Atenção: Você está prestes a apagar um registro histórico. Confirmar exclusão?')) {
-      setHistorico(historico.filter((h: any) => h.id !== registroSelecionado.id));
-      setEditModalOpen(false);
-      resetForm();
+      try {
+        const { error } = await supabase.from('historico').delete().eq('id', registroSelecionado.id);
+        if (error) throw error;
+
+        setHistorico(historico.filter((h: any) => h.id !== registroSelecionado.id));
+        setEditModalOpen(false);
+        resetForm();
+        toast.success('Registro removido!');
+      } catch (err) {
+        console.error(err);
+        toast.error('Erro ao remover histórico');
+      }
     }
   };
 
   // Gerencia a lista de anos únicos pra colocar no filtro
-  const anosDisponiveis = Array.from(new Set(historico.map((h: any) => h.ano))).sort().reverse();
+  const anosDisponiveis = Array.from(new Set(historico.map((h: any) => h.ano || new Date().getFullYear()))).sort().reverse();
 
   return (
     <div className="space-y-6">
@@ -164,7 +222,11 @@ export default function Historico() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredItems.length === 0 ? (
+        {loading ? (
+          <div className="col-span-full flex justify-center p-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="col-span-full text-center p-12 bg-white rounded-xl border border-slate-200">
             <p className="text-slate-500">Nenhum registro histórico encontrado com estes filtros.</p>
           </div>

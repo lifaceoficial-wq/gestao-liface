@@ -58,9 +58,17 @@ export default function Jogos() {
       const { data: camps } = await supabase.from('campeonatos').select('*');
       if (camps) setCampeonatos(camps);
 
-      // Fetch Equipes
+      // Fetch Equipes e seus Campeonatos (N:N)
       const { data: eqs } = await supabase.from('equipes').select('*');
-      if (eqs) setEquipes(eqs);
+      const { data: ec } = await supabase.from('equipe_campeonatos').select('*');
+      
+      if (eqs) {
+        const eqsWithCamps = eqs.map(e => ({
+          ...e,
+          campeonatos_ativos: (ec || []).filter(c => c.equipe_id === e.id).map(c => c.campeonato_nome)
+        }));
+        setEquipes(eqsWithCamps);
+      }
 
       // Fetch Atletas
       const { data: atls } = await supabase.from('atletas').select('*');
@@ -85,7 +93,7 @@ export default function Jogos() {
     }
   };
 
-  const equipesFiltradasCamp = equipes.filter(e => e.campeonato_nome === formData.campeonato_nome);
+  const equipesFiltradasCamp = equipes.filter(e => e.campeonatos_ativos?.includes(formData.campeonato_nome));
 
   const handleSalvarJogo = async (e: React.FormEvent) => {
     e.preventDefault();

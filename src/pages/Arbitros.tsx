@@ -3,6 +3,7 @@ import { Plus, Search, Filter, Star, DollarSign } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 // Mock data base fallback caso o usuário não tenha nada no localStorage
 const INITIAL_MOCK_DATA = Array.from({ length: 12 }, (_, i) => ({
@@ -14,11 +15,8 @@ const INITIAL_MOCK_DATA = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export default function Arbitros() {
-  const [arbitros, setArbitros] = useState(() => {
-    const saved = localStorage.getItem('@nicolau:arbitros');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [arbitros, setArbitros] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,10 +34,23 @@ export default function Arbitros() {
   // Estados do formulário de criação/edição
   const [formData, setFormData] = useState({ nome: '', funcao: 'Árbitro Principal', contato: '' });
 
-  // Salva no localStorage sempre que 'arbitros' mudar para simular o banco de dados
   useEffect(() => {
-    localStorage.setItem('@nicolau:arbitros', JSON.stringify(arbitros));
-  }, [arbitros]);
+    fetchArbitros();
+  }, []);
+
+  const fetchArbitros = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from('arbitros').select('*').order('criado_em', { ascending: false });
+      if (error) throw error;
+      setArbitros(data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao buscar árbitros');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filtra por busca e ajusta a paginação
   const filteredItems = arbitros.filter((a: any) => 
@@ -51,27 +62,50 @@ export default function Arbitros() {
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const currentItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleSalvar = (e: React.FormEvent) => {
+  const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
-    const novoArbitro = {
-      id: Date.now(),
-      nome: formData.nome,
-      funcao: formData.funcao,
-      contato: formData.contato,
-      avaliacao: '0.0' // Começa sem avaliação
-    };
-    setArbitros([novoArbitro, ...arbitros]);
-    setFormModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('arbitros').insert([{
+        nome: formData.nome,
+        funcao: formData.funcao,
+        contato: formData.contato,
+        avaliacao: '0.0', // fallback se não for tabela que tem avaliação fixa
+        status: 'Ativo'
+      }]).select();
+
+      if (error) throw error;
+      
+      setArbitros([data[0], ...arbitros]);
+      setFormModalOpen(false);
+      resetForm();
+      toast.success('Árbitro cadastrado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar árbitro');
+    }
   };
 
-  const handleEditar = (e: React.FormEvent) => {
+  const handleEditar = async (e: React.FormEvent) => {
     e.preventDefault();
-    setArbitros(arbitros.map((a: any) => 
-      a.id === arbitroSelecionado.id ? { ...a, ...formData } : a
-    ));
-    setEditModalOpen(false);
-    resetForm();
+    try {
+      const { data, error } = await supabase.from('arbitros').update({
+        nome: formData.nome,
+        funcao: formData.funcao,
+        contato: formData.contato
+      }).eq('id', arbitroSelecionado.id).select();
+
+      if (error) throw error;
+
+      setArbitros(arbitros.map((a: any) => 
+        a.id === arbitroSelecionado.id ? data[0] : a
+      ));
+      setEditModalOpen(false);
+      resetForm();
+      toast.success('Árbitro atualizado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar árbitro');
+    }
   };
 
   const resetForm = () => {
@@ -94,28 +128,42 @@ export default function Arbitros() {
     setEditModalOpen(true);
   };
 
-  const excluirArbitro = () => {
-    if (confirm('Tem certeza que deseja recindir o cadastro deste árbitro?')) {
-      setArbitros(arbitros.filter((a: any) => a.id !== arbitroSelecionado.id));
-      setProfileModalOpen(false);
-      resetForm();
+  const excluirArbitro = async () => {
+    if (confirm('Tem certeza que deseja rescindir o cadastro deste árbitro?')) {
+      try {
+        const { error } = await supabase.from('arbitros').delete().eq('id', arbitroSelecionado.id);
+        if (error) throw error;
+
+        setArbitros(arbitros.filter((a: any) => a.id !== arbitroSelecionado.id));
+        setProfileModalOpen(false);
+        resetForm();
+        toast.success('Árbitro removido!');
+      } catch (err) {
+        console.error(err);
+        toast.error('Erro ao remover árbitro');
+      }
     }
   };
 
-  const lancarPagamento = (e: React.FormEvent) => {
+  const lancarPagamento = async (e: React.FormEvent) => {
     e.preventDefault();
-    const desp = {
-      id: Date.now(),
-      descricao: `Pgto Árbitro: ${arbitroSelecionado.nome}`,
-      vencimento: new Date().toLocaleDateString('pt-BR'),
-      valor: paymentValor,
-      status: 'Pago',
-      tipo: 'despesa'
-    };
-    const f = JSON.parse(localStorage.getItem('@nicolau:financeiro') || '[]');
-    localStorage.setItem('@nicolau:financeiro', JSON.stringify([desp, ...f]));
-    toast.success(`Pagamento de R$${paymentValor} lançado como DESPESA no Financeiro.`, { duration: 4000 });
-    setPaymentModalOpen(false);
+    try {
+      const desp = {
+        descricao: `Pgto Árbitro: ${arbitroSelecionado.nome}`,
+        vencimento: new Date().toISOString().split('T')[0],
+        valor: paymentValor,
+        status: 'Pago',
+        equipe: 'LIFACE'
+      };
+      const { error } = await supabase.from('financeiro').insert([desp]);
+      if (error) throw error;
+
+      toast.success(`Pagamento de R$${paymentValor} lançado como DESPESA no Financeiro.`, { duration: 4000 });
+      setPaymentModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao lançar pagamento');
+    }
   };
 
   return (
@@ -159,7 +207,11 @@ export default function Arbitros() {
         </button>
       </div>
 
-      {filteredItems.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      ) : filteredItems.length === 0 ? (
         <div className="text-center p-12 bg-white rounded-xl border border-slate-200 shadow-sm">
           <p className="text-slate-500">Nenhum árbitro encontrado.</p>
         </div>
@@ -182,7 +234,7 @@ export default function Arbitros() {
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
                 <div className="flex items-center">
                   <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-                  <span className="ml-1.5 text-sm font-medium text-slate-900">{arbitro.avaliacao}</span>
+                  <span className="ml-1.5 text-sm font-medium text-slate-900">{arbitro.avaliacao || '0.0'}</span>
                   <span className="ml-1 text-sm text-slate-500">/ 5.0</span>
                 </div>
                 <button 

@@ -12,6 +12,8 @@ export default function Suspensoes() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormModalOpen, setFormModalOpen] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<'atletas' | 'equipes'>('atletas');
+
   const [formData, setFormData] = useState({
     infrator: '', 
     tipo: 'Automática', 
@@ -50,13 +52,15 @@ export default function Suspensoes() {
     }
   };
 
-  const suspenderAtletaNaOrigem = async (infratorNome: string) => {
+  const suspenderAtletaNaOrigem = async (infratorNome: string, tabOrigem: 'atletas' | 'equipes') => {
     try {
-      const isAtleta = infratoresList.some(i => i.nome === infratorNome && i.tipo_origem === 'Atleta');
-      if (isAtleta) {
+      if (tabOrigem === 'atletas') {
         await supabase.from('atletas').update({ status: 'Suspenso' }).eq('nome', infratorNome);
       } else {
+        // Suspensão da Equipe
         await supabase.from('equipes').update({ status: 'SuspensaRegras' }).eq('nome', infratorNome);
+        // Cascata: Suspensão de todos os atletas vinculados a esta equipe
+        await supabase.from('atletas').update({ status: 'Suspenso' }).eq('equipe_nome', infratorNome);
       }
     } catch(err) {
       console.error('Falha ao atualizar status na origem', err);
@@ -96,9 +100,9 @@ export default function Suspensoes() {
         }]);
       }
 
-      // 3. Atualizar Entidade Associada
+      // 3. Atualizar Entidade Associada (Cascata para equipes e atletas da equipe)
       if (formData.status === 'Ativa') {
-        await suspenderAtletaNaOrigem(formData.infrator);
+        await suspenderAtletaNaOrigem(formData.infrator, activeTab);
       }
 
       toast.success('Punição Aplicada e sincronizada na nuvem!');
@@ -113,9 +117,23 @@ export default function Suspensoes() {
 
   const resetForm = () => setFormData({ infrator: '', tipo: 'Automática', motivo: '', jogosSuspensos: 1, multaValor: 0, status: 'Ativa' });
 
-  const filteredItems = suspensoes.filter((s: any) => 
-    s.infrator?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.motivo?.toLowerCase().includes(searchTerm.toLowerCase())
+  const suspensoesFiltradas = suspensoes.filter((s: any) => {
+    const isNameMatch = s.infrator?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        s.motivo?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Identificar de onde o infrator veio para separar as abas
+    const infratorData = infratoresList.find(i => i.nome === s.infrator);
+    // Se não achar na lista, tenta deduzir pelo tipo de aba, mas o ideal é que ache.
+    // Assumimos "Atleta" por padrão para registros legados, se não encontrados.
+    const suspType = infratorData ? infratorData.tipo_origem : 'Atleta';
+    
+    const isTabMatch = activeTab === 'atletas' ? suspType === 'Atleta' : suspType === 'Equipe';
+    
+    return isNameMatch && isTabMatch;
+  });
+
+  const infratoresAtivosParaModal = infratoresList.filter(i => 
+    activeTab === 'atletas' ? i.tipo_origem === 'Atleta' : i.tipo_origem === 'Equipe'
   );
 
   return (
@@ -126,7 +144,22 @@ export default function Suspensoes() {
           <p className="text-sm text-slate-500 mt-1">Status bloqueante conectado ao banco de dados geral em Nuvem.</p>
         </div>
         <button onClick={() => { resetForm(); setFormModalOpen(true); }} className="inline-flex items-center justify-center rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 shadow-sm">
-          <AlertTriangle className="-ml-1 mr-2 h-5 w-5" /> Iniciar Processo/Sanção
+          <AlertTriangle className="-ml-1 mr-2 h-5 w-5" /> Iniciar Processo de {activeTab === 'atletas' ? 'Atleta' : 'Equipe'}
+        </button>
+      </div>
+
+      <div className="flex border-b border-slate-200">
+        <button 
+          onClick={() => setActiveTab('atletas')}
+          className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'atletas' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Suspensão de Atletas
+        </button>
+        <button 
+          onClick={() => setActiveTab('equipes')}
+          className={`px-4 py-3 font-semibold text-sm transition-colors border-b-2 ${activeTab === 'equipes' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Suspensão de Equipes
         </button>
       </div>
 
@@ -139,9 +172,14 @@ export default function Suspensoes() {
 
       {loading ? (
         <div className="text-center p-12 bg-white rounded-xl border"><p className="text-slate-500">Carregando processos...</p></div>
+      ) : suspensoesFiltradas.length === 0 ? (
+        <div className="text-center p-12 bg-white rounded-xl border">
+          <AlertTriangle className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500">Nenhuma suspensão de {activeTab === 'atletas' ? 'atleta' : 'equipe'} encontrada.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-           {filteredItems.map((s: any) => (
+           {suspensoesFiltradas.map((s: any) => (
               <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm border-l-4 border-l-rose-500 hover:shadow-md transition-shadow">
                  <h3 className="font-bold text-slate-900 text-lg mb-1">{s.infrator}</h3>
                  <span className="text-xs bg-slate-100 text-slate-600 px-2 flex items-center mb-4 rounded-md w-fit ring-1 ring-slate-200">Processo</span>
@@ -160,11 +198,11 @@ export default function Suspensoes() {
       <Modal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} title="Nova Penalidade Relacional">
         <form onSubmit={handleSalvar} className="space-y-4">
           <div className="bg-rose-50 p-3 rounded-lg border border-rose-100 mb-4">
-            <label className="block text-sm font-bold text-rose-900">Selecione o Infrator da Nuvem</label>
+            <label className="block text-sm font-bold text-rose-900">Selecione o Infrator da Nuvem ({activeTab === 'atletas' ? 'Atleta' : 'Equipe'})</label>
             <select required value={formData.infrator} onChange={e => setFormData({...formData, infrator: e.target.value})} className="mt-2 block w-full rounded-md border-slate-300 px-3 py-2 sm:text-sm border">
                <option value="">-- Buscar Cadastro --</option>
-               {infratoresList.map((inf, i) => (
-                 <option key={i} value={inf.nome}>{inf.nome} ({inf.tipo_origem})</option>
+               {infratoresAtivosParaModal.map((inf, i) => (
+                 <option key={i} value={inf.nome}>{inf.nome}</option>
                ))}
             </select>
           </div>
@@ -185,7 +223,9 @@ export default function Suspensoes() {
             </div>
           </div>
           <p className="text-xs text-slate-500 italic border-t border-slate-100 pt-3">
-             Ao aplicar, atualizaremos a entidade em nuvem. Se houver multa, um débito bloqueante de pagamento automático será emitido no Financeiro.
+             Ao aplicar, atualizaremos a entidade em nuvem. 
+             {activeTab === 'equipes' && " CUIDADO: Suspender uma equipe suspenderá automaticamente TODOS os seus atletas."}
+             {formData.multaValor > 0 && " Será emitido um débito bloqueante automático no Financeiro."}
           </p>
           <div className="pt-2 flex justify-end space-x-3">
             <button type="button" onClick={() => setFormModalOpen(false)} className="rounded-md bg-white border border-slate-300 px-3 py-2 text-sm">Cancelar</button>
