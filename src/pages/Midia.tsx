@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Image as ImageIcon, Video, MoreVertical, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Image as ImageIcon, Video, MoreVertical, Edit2, Trash2, X, Maximize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
@@ -29,14 +29,19 @@ export default function Midia() {
   
   const [midiaSelecionada, setMidiaSelecionada] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [viewerAlbum, setViewerAlbum] = useState<any>(null);
+  const [viewerIndex, setViewerIndex] = useState<number>(0);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    titulo: string; tipo: string; itens: number; data: string; badge: string; coverUrl: string; urls: string[];
+  }>({
     titulo: '',
     tipo: 'foto',
     itens: 1,
     data: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
     badge: 'Nenhum',
-    coverUrl: ''
+    coverUrl: '',
+    urls: []
   });
 
   useEffect(() => {
@@ -81,20 +86,25 @@ export default function Midia() {
         itens: formData.itens,
         data: formData.data,
         badge: formData.badge === 'Nenhum' ? null : formData.badge,
-        cover_url: formData.coverUrl // Mapping to cover_url
+        cover_url: formData.coverUrl,
+        urls: formData.urls
       }]).select();
 
       if (error) throw error;
       
-      const novo = { ...data[0], coverUrl: data[0].cover_url };
+      if (data && data.length > 0) {
+        const novo = { ...data[0], coverUrl: data[0].cover_url };
+        setMidias([novo, ...midias]);
+      } else {
+        fetchMidias(); // Recarrega se o select não retornar os dados (ex: regras de RLS)
+      }
       
-      setMidias([novo, ...midias]);
       setFormModalOpen(false);
       resetForm();
       toast.success('Álbum salvo!');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Erro ao salvar álbum');
+      toast.error('Erro ao salvar álbum: ' + err.message);
     }
   };
 
@@ -103,37 +113,38 @@ export default function Midia() {
     if (!files || files.length === 0) return;
     
     setIsUploading(true);
-    const file = files[0];
     
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const uploadedUrls: string[] = [];
       
-      const { error: uploadError } = await supabase.storage
-        .from('midias')
-        .upload(filePath, file);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage.from('midias').upload(filePath, file);
 
-      if (uploadError) {
-        console.warn('Supabase storage errored, fallback local', uploadError);
-        const localUrl = URL.createObjectURL(file);
-        setFormData({
-          ...formData, 
-          itens: files.length, 
-          tipo: file.type.startsWith('video') ? 'video' : 'foto',
-          coverUrl: localUrl
-        });
-        toast.success(`Arquivo carregado em cache localmente.`);
-      } else {
-        const { data: { publicUrl } } = supabase.storage.from('midias').getPublicUrl(filePath);
-        setFormData({
-          ...formData, 
-          itens: files.length, 
-          tipo: file.type.startsWith('video') ? 'video' : 'foto',
-          coverUrl: publicUrl
-        });
-        toast.success(`Upload concluído com sucesso!`);
+        if (uploadError) {
+          console.warn('Erro Storage:', uploadError);
+          toast.error(`Falha ao subir arquivo. Verifique se o bucket "midias" existe e é Público no Supabase.`);
+          // Ainda vamos usar o blob apenas para preview antes de salvar, mas no banco ficará quebrado se recarregar
+          const localUrl = URL.createObjectURL(file);
+          uploadedUrls.push(localUrl);
+        } else {
+          const { data: { publicUrl } } = supabase.storage.from('midias').getPublicUrl(filePath);
+          uploadedUrls.push(publicUrl);
+        }
       }
+
+      setFormData({
+        ...formData, 
+        itens: files.length, 
+        tipo: files[0].type.startsWith('video') ? 'video' : 'foto',
+        coverUrl: uploadedUrls[0] || '',
+        urls: uploadedUrls
+      });
+      toast.success(`${files.length} arquivo(s) carregado(s)!`);
     } catch (error) {
       console.error(error);
       toast.error('Erro ao processar o upload.');
@@ -150,19 +161,25 @@ export default function Midia() {
         tipo: formData.tipo,
         itens: formData.itens,
         badge: formData.badge === 'Nenhum' ? null : formData.badge,
-        cover_url: formData.coverUrl
+        cover_url: formData.coverUrl,
+        urls: formData.urls
       }).eq('id', midiaSelecionada.id).select();
 
       if (error) throw error;
 
-      const atualizado = { ...data[0], coverUrl: data[0].cover_url };
-      setMidias(midias.map((m: any) => m.id === midiaSelecionada.id ? atualizado : m));
+      if (data && data.length > 0) {
+        const atualizado = { ...data[0], coverUrl: data[0].cover_url };
+        setMidias(midias.map((m: any) => m.id === midiaSelecionada.id ? atualizado : m));
+      } else {
+        fetchMidias();
+      }
+      
       setEditModalOpen(false);
       resetForm();
       toast.success('Álbum atualizado!');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Erro ao atualizar álbum');
+      toast.error('Erro ao atualizar álbum: ' + err.message);
     }
   };
 
@@ -173,7 +190,8 @@ export default function Midia() {
       itens: 1,
       data: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
       badge: 'Nenhum',
-      coverUrl: ''
+      coverUrl: '',
+      urls: []
     });
     setMidiaSelecionada(null);
   };
@@ -186,7 +204,8 @@ export default function Midia() {
       itens: midia.itens || 1,
       data: midia.data || '',
       badge: midia.badge || 'Nenhum',
-      coverUrl: midia.coverUrl || midia.cover_url || ''
+      coverUrl: midia.coverUrl || midia.cover_url || '',
+      urls: midia.urls || []
     });
     setEditModalOpen(true);
   };
@@ -272,26 +291,37 @@ export default function Midia() {
           </div>
         ) : (
           currentItems.map((album: any) => (
-            <div key={album.id} className="group relative rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-              <div className="aspect-w-16 aspect-h-9 bg-slate-100 relative">
+            <div key={album.id} className="group relative rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col">
+              <div 
+                className="aspect-w-16 aspect-h-10 bg-slate-100 relative cursor-pointer overflow-hidden"
+                onClick={() => { setViewerAlbum(album); setViewerIndex(0); }}
+              >
                 <img 
                   src={album.coverUrl || album.cover_url || `https://picsum.photos/seed/album${album.id}/400/225`} 
                   alt={album.titulo}  
-                  className="object-cover w-full h-48"
+                  onError={(e) => { e.currentTarget.src = 'https://placehold.co/600x400/e2e8f0/475569?text=M%C3%ADdia+Indispon%C3%ADvel' }}
+                  className="object-cover w-full h-56 transform group-hover:scale-105 transition-transform duration-500"
                   referrerPolicy="no-referrer"
                 />
                 
-                <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-slate-900/80 to-transparent" />
+                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition-colors flex items-center justify-center">
+                  <Maximize2 className="text-white opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 drop-shadow-md" />
+                </div>
+
+                <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent" />
                 
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white">
-                  {album.tipo === 'foto' ? <ImageIcon className="h-5 w-5" /> : <Video className="h-5 w-5" />}
-                  <span className="text-xs font-medium">{album.itens} {album.itens === 1 ? 'item' : 'itens'}</span>
+                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white drop-shadow-md">
+                  <div className="flex items-center gap-1.5">
+                    {album.tipo === 'foto' ? <ImageIcon className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+                    <span className="text-xs font-semibold tracking-wide uppercase">{album.tipo}</span>
+                  </div>
+                  <span className="text-xs font-medium bg-white/20 backdrop-blur-sm px-2 py-1 rounded-md">{album.itens} {album.itens === 1 ? 'item' : 'itens'}</span>
                 </div>
                 
                 {album.badge && (
-                  <div className="absolute top-3 right-3 shadow-sm">
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium text-white shadow-sm ${
-                      album.badge === 'Disciplinar' ? 'bg-rose-600' : 'bg-emerald-600'
+                  <div className="absolute top-3 right-3 shadow-sm z-10">
+                    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold text-white shadow-sm tracking-wide ${
+                      album.badge === 'Disciplinar' ? 'bg-rose-600/90 backdrop-blur-sm' : 'bg-emerald-600/90 backdrop-blur-sm'
                     }`}>
                       {album.badge}
                     </span>
@@ -299,20 +329,21 @@ export default function Midia() {
                 )}
                 
                 {/* Botão flutuante de editar que aparece no hover (apenas desktop) ou é fixo no mobile */}
-                <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => abrirEditar(album)} className="p-1.5 bg-white/90 backdrop-blur-sm shadow-sm rounded-md text-slate-700 hover:text-blue-600 transition-colors">
+                <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); abrirEditar(album); }} 
+                    className="p-2 bg-white/90 backdrop-blur-sm shadow-md rounded-lg text-slate-700 hover:text-blue-600 hover:bg-white transition-all"
+                    title="Editar Álbum"
+                  >
                     <Edit2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-              <div className="p-4 flex justify-between items-start">
-                <div className="overflow-hidden">
-                  <h3 className="text-sm font-semibold text-slate-900 truncate" title={album.titulo}>{album.titulo}</h3>
-                  <p className="mt-1 text-xs text-slate-500">{album.data}</p>
+              <div className="p-4 flex justify-between items-start flex-1 flex-col">
+                <div className="w-full">
+                  <h3 className="text-base font-bold text-slate-900 leading-tight line-clamp-2" title={album.titulo}>{album.titulo}</h3>
+                  <p className="mt-2 text-xs font-medium text-slate-500 uppercase tracking-wider">{album.data}</p>
                 </div>
-                <button onClick={() => abrirEditar(album)} className="sm:hidden p-1 text-slate-400 hover:text-blue-600">
-                  <MoreVertical className="w-4 h-4" />
-                </button>
               </div>
             </div>
           ))
@@ -328,6 +359,65 @@ export default function Midia() {
             totalItems={totalItems}
             itemsPerPage={itemsPerPage}
           />
+        </div>
+      )}
+
+      {/* LIGHTBOX VIEWER PARA FOTOS PROFISSIONAIS E CARROSSEL */}
+      {viewerAlbum && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 backdrop-blur-md p-4 sm:p-8 transition-opacity duration-300"
+          onClick={() => setViewerAlbum(null)}
+        >
+          {/* Botão Fechar */}
+          <button 
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors z-50"
+            onClick={(e) => { e.stopPropagation(); setViewerAlbum(null); }}
+          >
+            <X className="w-8 h-8" />
+          </button>
+          
+          {/* Setas de Navegação */}
+          {viewerAlbum.urls && viewerAlbum.urls.length > 1 && (
+            <>
+              <button 
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/50 rounded-full transition-colors z-50"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setViewerIndex(prev => prev > 0 ? prev - 1 : viewerAlbum.urls.length - 1);
+                }}
+              >
+                <ChevronLeft className="w-8 h-8" />
+              </button>
+              
+              <button 
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/50 rounded-full transition-colors z-50"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setViewerIndex(prev => prev < viewerAlbum.urls.length - 1 ? prev + 1 : 0);
+                }}
+              >
+                <ChevronRight className="w-8 h-8" />
+              </button>
+            </>
+          )}
+
+          {/* Imagem Atual */}
+          <div className="relative w-full h-full flex flex-col items-center justify-center">
+            <img 
+              src={(viewerAlbum.urls && viewerAlbum.urls.length > 0) ? viewerAlbum.urls[viewerIndex] : (viewerAlbum.coverUrl || viewerAlbum.cover_url || `https://picsum.photos/seed/album${viewerAlbum.id}/800/600`)} 
+              alt={`Visualização ${viewerIndex + 1}`} 
+              onError={(e) => { e.currentTarget.src = 'https://placehold.co/800x600/1e293b/94a3b8?text=M%C3%ADdia+Indispon%C3%ADvel' }}
+              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl ring-1 ring-white/10"
+              onClick={(e) => e.stopPropagation()} 
+            />
+            
+            {/* Indicador de Quantidade */}
+            {viewerAlbum.urls && viewerAlbum.urls.length > 1 && (
+              <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-white/80 font-medium tracking-widest text-sm bg-black/30 px-4 py-1.5 rounded-full">
+                {viewerIndex + 1} / {viewerAlbum.urls.length}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
